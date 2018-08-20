@@ -1,2 +1,2 @@
 # gnux32
-gnux32 (glibc + x32 abi) overlay for Gentoo Linux
+Unofficial overlay for Gentoo Linux for x32 ABI + glibc (default/linux/amd64/17.0/x32)
