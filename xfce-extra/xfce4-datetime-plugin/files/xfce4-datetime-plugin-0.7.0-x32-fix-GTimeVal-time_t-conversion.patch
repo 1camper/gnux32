@@ -1,0 +1,21 @@
+https://bugs.gentoo.org/show_bug.cgi?id=663498
+--- a/panel-plugin/datetime.c
++++ b/panel-plugin/datetime.c
+@@ -133,6 +133,7 @@
+ gboolean datetime_update(t_datetime *datetime)
+ {
+   GTimeVal timeval;
++  time_t seconds;
+   gchar *utf8str;
+   struct tm *current;
+   guint wake_interval;  /* milliseconds to next update */
+@@ -146,7 +147,8 @@
+   }
+ 
+   g_get_current_time(&timeval);
+-  current = localtime((time_t *)&timeval.tv_sec);
++  seconds = timeval.tv_sec;
++  current = localtime(&seconds);
+ 
+   if (datetime->layout != LAYOUT_TIME &&
+       datetime->date_format != NULL && GTK_IS_LABEL(datetime->date_label))
