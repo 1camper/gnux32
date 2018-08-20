@@ -1,0 +1,19 @@
+--- js-1.8.5.orig/js/src/configure.in
++++ js-1.8.5/js/src/configure.in
+@@ -2937,6 +2937,16 @@
+     AC_DEFINE(JS_CPU_X86)
+     AC_DEFINE(JS_NUNBOX32)
+     ;;
++x86_64*x32)
++    ENABLE_TRACEJIT=
++    NANOJIT_ARCH= #disabled jit
++    ENABLE_METHODJIT=
++    #ENABLE_MONOIC=1
++    #ENABLE_POLYIC=1
++    #ENABLE_POLYIC_TYPED_ARRAY=1
++    AC_DEFINE(JS_CPU_X64)
++    AC_DEFINE(JS_PUNBOX64)
++    ;;
+ x86_64*-*)
+     ENABLE_TRACEJIT=1
+     NANOJIT_ARCH=X64
