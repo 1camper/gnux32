@@ -1,0 +1,37 @@
+--- a/tools/gcc.jam
++++ b/tools/gcc.jam
+@@ -223,7 +223,7 @@
+         # right onces. Note that we do not provide a clean way to build a 32-bit
+         # binary using a 64-bit compiler, but user can always pass -m32
+         # manually.
+-        local lib_path = $(root)/bin $(root)/lib $(root)/lib32 $(root)/lib64 ;
++        local lib_path = $(root)/bin $(root)/lib $(root)/lib32 $(root)/libx32 $(root)/lib64 ;
+         if $(.debug-configuration)
+         {
+             ECHO "notice:" using gcc libraries "::" $(condition) "::" $(lib_path) ;
+@@ -360,6 +360,7 @@
+     local generic-os = [ set.difference $(all-os) : aix hpux ] ;
+     local arch = power sparc x86 ;
+     compile-link-flags <target-os>$(generic-os)/<architecture>$(arch)/<address-model>32 : -m32 ;
++    compile-link-flags <target-os>linux/<architecture>x86/<address-model>32_64 : -mx32 ;
+     compile-link-flags <target-os>$(generic-os)/<architecture>$(arch)/<address-model>64 : -m64 ;
+ }
+ 
+--- a/tools/gcc.py
++++ b/tools/gcc.py
+@@ -162,6 +162,7 @@
+         lib_path = [os.path.join(root, 'bin'),
+                     os.path.join(root, 'lib'),
+                     os.path.join(root, 'lib32'),
++                    os.path.join(root, 'libx32'),
+                     os.path.join(root, 'lib64')]
+         if debug():
+             print 'notice: using gcc libraries ::', condition, '::', lib_path
+@@ -744,6 +745,7 @@
+ #
+ # x86 and compatible
+ flags('gcc', 'OPTIONS', ['<architecture>x86/<address-model>32'], ['-m32'])
++flags('gcc', 'OPTIONS', ['<architecture>x86/<address-model>32_64'], ['-mx32'])
+ flags('gcc', 'OPTIONS', ['<architecture>x86/<address-model>64'], ['-m64'])
+ cpu_flags('gcc', 'OPTIONS', 'x86', 'native', ['-march=native'])
+ cpu_flags('gcc', 'OPTIONS', 'x86', 'i486', ['-march=i486'])

@@ -1,0 +1,60 @@
+--- a/boostcpp.jam
++++ b/boostcpp.jam
+@@ -621,8 +621,9 @@
+     return [ property.select <target-os> <toolset> $(toolset-version-property) : $(properties) ] ;
+ }
+ 
+-feature.feature deduced-address-model : 32 64 : propagated optional composite hidden ;
++feature.feature deduced-address-model : 32 32_64 64 : propagated optional composite hidden ;
+ feature.compose <deduced-address-model>32 : <address-model>32 ;
++feature.compose <deduced-address-model>32_64 : <address-model>32_64 ;
+ feature.compose <deduced-address-model>64 : <address-model>64 ;
+ 
+ rule deduce-address-model ( properties * )
+@@ -634,6 +635,10 @@
+     {
+         result = 32 ;
+     }
++    else if [ configure.builds /boost/architecture//32_64 : $(filtered) : "64-bit x32" ]
++    {
++        result = 32_64 ;
++    }
+     else if [ configure.builds /boost/architecture//64 : $(filtered) : 64-bit ]
+     {
+         result = 64 ;
+--- a/libs/config/checks/architecture/32_64.cpp
++++ b/libs/config/checks/architecture/32_64.cpp
+@@ -0,0 +1,3 @@
++#if !defined(__x86_64__) || !defined(__ILP32__)
++#error "Not x86_64 x32 abi"
++#endif
+--- a/libs/config/checks/architecture/32.cpp
++++ b/libs/config/checks/architecture/32.cpp
+@@ -6,4 +6,7 @@
+ // accompanying file LICENSE_1_0.txt or copy at
+ // http://www.boost.org/LICENSE_1_0.txt)
+ 
++#ifdef __x86_64__
++#error
++#endif
+ int test[sizeof(void*) == 4? 1 : -1];
+--- a/libs/config/checks/architecture/64.cpp
++++ b/libs/config/checks/architecture/64.cpp
+@@ -6,4 +6,7 @@
+ // accompanying file LICENSE_1_0.txt or copy at
+ // http://www.boost.org/LICENSE_1_0.txt)
+ 
++#ifdef __ILP32__
++#error
++#endif
+ int test[sizeof(void*) == 8? 1 : -1];
+--- a/libs/config/checks/architecture/Jamroot.jam
++++ b/libs/config/checks/architecture/Jamroot.jam
+@@ -13,6 +13,7 @@
+         ; 
+ 
+ obj 32 : 32.cpp ;
++obj 32_64 : 32_64.cpp ;
+ obj 64 : 64.cpp ;
+ 
+ obj arm      : arm.cpp ;
