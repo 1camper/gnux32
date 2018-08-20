@@ -1,0 +1,11 @@
+https://bugs.gentoo.org/664058
+--- a/m4/ax_boost_base.m4
++++ b/m4/ax_boost_base.m4
+@@ -94,6 +94,7 @@
+     if test $ax_arch = x86_64 -o $ax_arch = ppc64 -o $ax_arch = ppc64le -o $ax_arch = s390x -o $ax_arch = sparc64 -o $ax_arch = aarch64; then
+         libsubdirs="lib64 lib lib64"
+     fi
++    case $host_os in linux-*x32) libsubdirs="libx32 lib libx32";; esac
+ 
+     dnl first we check the system location for boost libraries
+     dnl this location is chosen if boost libraries are installed with the --layout=system option
