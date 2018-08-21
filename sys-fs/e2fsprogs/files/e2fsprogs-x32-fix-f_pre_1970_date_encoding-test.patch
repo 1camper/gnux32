@@ -1,0 +1,14 @@
+--- a/e2fsck/e2fsck.c
++++ b/e2fsck/e2fsck.c
+@@ -37,7 +37,11 @@
+ 
+ 	time_env = getenv("E2FSCK_TIME");
+ 	if (time_env)
++#if SIZEOF_LONG < SIZEOF_TIME_T
++		context->now = strtoull(time_env, NULL, 0);
++#else
+ 		context->now = strtoul(time_env, NULL, 0);
++#endif
+ 	else {
+ 		context->now = time(0);
+ 		if (context->now < 1262322000) /* January 1 2010 */
