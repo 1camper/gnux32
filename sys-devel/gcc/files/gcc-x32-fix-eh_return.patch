@@ -1,18 +1,16 @@
 https://gcc.gnu.org/bugzilla/show_bug.cgi?id=87014
---- a/gcc/config/i386/i386.md
-+++ b/gcc/config/i386/i386.md
-@@ -12524,7 +12524,13 @@
+--- trunk/gcc/config/i386/i386.md	2018/08/15 21:07:08	263572
++++ trunk/gcc/config/i386/i386.md	2018/08/20 19:14:04	263672
+@@ -13612,7 +13612,10 @@
       stack address we wish to restore.  */
    tmp = gen_rtx_PLUS (Pmode, arg_pointer_rtx, sa);
    tmp = plus_constant (Pmode, tmp, -UNITS_PER_WORD);
 -  tmp = gen_rtx_MEM (Pmode, tmp);
-+  if (!TARGET_X32)
-+    tmp = gen_rtx_MEM (Pmode, tmp);
-+  else
-+  {
-+    tmp = gen_rtx_MEM (DImode, tmp);
-+    ra = convert_to_mode (DImode, ra, 1);
-+  }
++  /* Return address is always in word_mode.  */
++  tmp = gen_rtx_MEM (word_mode, tmp);
++  if (GET_MODE (ra) != word_mode)
++    ra = convert_to_mode (word_mode, ra, 1);
    emit_move_insn (tmp, ra);
  
    emit_jump_insn (gen_eh_return_internal ());
+
