@@ -1,0 +1,690 @@
+diff --git a/src/arch-x32.c b/src/arch-x32.c
+index d45ac06..1801920 100644
+--- a/src/arch-x32.c
++++ b/src/arch-x32.c
+@@ -30,7 +30,7 @@ const struct arch_def arch_def_x32 = {
+ 	.token = SCMP_ARCH_X32,
+ 	/* NOTE: this seems odd but the kernel treats x32 like x86_64 here */
+ 	.token_bpf = AUDIT_ARCH_X86_64,
+-	.size = ARCH_SIZE_32,
++	.size = ARCH_SIZE_64,
+ 	.endian = ARCH_ENDIAN_LITTLE,
+ 	.syscall_resolve_name = x32_syscall_resolve_name,
+ 	.syscall_resolve_num = x32_syscall_resolve_num,
+diff --git a/tests/01-sim-allow.tests b/tests/01-sim-allow.tests
+index 9630276..94a308d 100644
+--- a/tests/01-sim-allow.tests
++++ b/tests/01-sim-allow.tests
+@@ -7,8 +7,8 @@
+ 
+ test type: bpf-sim
+ 
+-# Testname	Arch	Syscall	Arg0	Arg1	Arg2	Arg3	Arg4	Arg5	Result
+-01-sim-allow	all	0-350	N	N	N	N	N	N	ALLOW
++# Testname	Arch	Syscall			Arg0	Arg1	Arg2	Arg3	Arg4	Arg5	Result
++01-sim-allow	all	0-350			N	N	N	N	N	N	ALLOW
+ 
+ test type: bpf-sim-fuzz
+ 
+diff --git a/tests/02-sim-basic.tests b/tests/02-sim-basic.tests
+index 07004a4..9a67d73 100644
+--- a/tests/02-sim-basic.tests
++++ b/tests/02-sim-basic.tests
+@@ -18,6 +18,8 @@ test type: bpf-sim
+ 02-sim-basic	x86	174-350		N		N		N	N	N	N	KILL
+ 02-sim-basic	x86_64	4-14		N		N		N	N	N	N	KILL
+ 02-sim-basic	x86_64	16-350		N		N		N	N	N	N	KILL
++02-sim-basic	x32	4-512		N		N		N	N	N	N	KILL
++02-sim-basic	x32	514-560		N		N		N	N	N	N	KILL
+ 
+ test type: bpf-sim-fuzz
+ 
+diff --git a/tests/03-sim-basic_chains.tests b/tests/03-sim-basic_chains.tests
+index ef4353a..1f1e4c2 100644
+--- a/tests/03-sim-basic_chains.tests
++++ b/tests/03-sim-basic_chains.tests
+@@ -20,6 +20,8 @@ test type: bpf-sim
+ 03-sim-basic_chains	x86	174-350		N		N		N	N	N	N	KILL
+ 03-sim-basic_chains	x86_64	4-14		N		N		N	N	N	N	KILL
+ 03-sim-basic_chains	x86_64	16-350		N		N		N	N	N	N	KILL
++03-sim-basic_chains	x32	4-512		N		N		N	N	N	N	KILL
++03-sim-basic_chains	x32	514-560		N		N		N	N	N	N	KILL
+ 
+ test type: bpf-sim-fuzz
+ 
+diff --git a/tests/04-sim-multilevel_chains.tests b/tests/04-sim-multilevel_chains.tests
+index 6613f9a..d699f7a 100644
+--- a/tests/04-sim-multilevel_chains.tests
++++ b/tests/04-sim-multilevel_chains.tests
+@@ -10,18 +10,18 @@ test type: bpf-sim
+ # Testname			Arch		Syscall		Arg0		Arg1		Arg2			Arg3	Arg4	Arg5	Result
+ 04-sim-multilevel_chains	all,-aarch64	open		0x856B008	4		N			N	N	N	ALLOW
+ 04-sim-multilevel_chains	all		close		4		N		N			N	N	N	ALLOW
+-04-sim-multilevel_chains	x86		read		0		0x856B008	0x7FFFFFFE		N	N	N	ALLOW
++04-sim-multilevel_chains	x86,x32		read		0		0x856B008	0x7FFFFFFE		N	N	N	ALLOW
+ 04-sim-multilevel_chains	x86_64		read		0		0x856B008	0x7FFFFFFFFFFFFFFE	N	N	N	ALLOW
+-04-sim-multilevel_chains	x86		read		0		0x856B008	0x7FFFFFFF		N	N	N	KILL
++04-sim-multilevel_chains	x86,x32		read		0		0x856B008	0x7FFFFFFF		N	N	N	KILL
+ 04-sim-multilevel_chains	x86_64		read		0		0x856B008	0x7FFFFFFFFFFFFFFF	N	N	N	KILL
+-04-sim-multilevel_chains	x86		read		0		0		0x7FFFFFFE		N	N	N	KILL
++04-sim-multilevel_chains	x86,x32		read		0		0		0x7FFFFFFE		N	N	N	KILL
+ 04-sim-multilevel_chains	x86_64		read		0		0		0x7FFFFFFFFFFFFFFE	N	N	N	KILL
+ 04-sim-multilevel_chains	all		read		1-10		0x856B008	0x7FFFFFFE		N	N	N	KILL
+-04-sim-multilevel_chains	x86		write		1-2		0x856B008	0x7FFFFFFE		N	N	N	ALLOW
++04-sim-multilevel_chains	x86,x32		write		1-2		0x856B008	0x7FFFFFFE		N	N	N	ALLOW
+ 04-sim-multilevel_chains	x86_64		write		1-2		0x856B008	0x7FFFFFFFFFFFFFFE	N	N	N	ALLOW
+-04-sim-multilevel_chains	x86		write		1-2		0		0x7FFFFFFE		N	N	N	KILL
++04-sim-multilevel_chains	x86,x32		write		1-2		0		0x7FFFFFFE		N	N	N	KILL
+ 04-sim-multilevel_chains	x86_64		write		1-2		0		0x7FFFFFFFFFFFFFFE	N	N	N	KILL
+-04-sim-multilevel_chains	x86		write		1-2		0x856B008	0x7FFFFFFF		N	N	N	KILL
++04-sim-multilevel_chains	x86,x32		write		1-2		0x856B008	0x7FFFFFFF		N	N	N	KILL
+ 04-sim-multilevel_chains	x86_64		write		1-2		0x856B008	0x7FFFFFFFFFFFFFFF	N	N	N	KILL
+ 04-sim-multilevel_chains	all		write		3-10		0x856B008	0x7FFFFFFE		N	N	N	KILL
+ 04-sim-multilevel_chains	all		rt_sigreturn	N		N		N			N	N	N	ALLOW
+@@ -30,6 +30,8 @@ test type: bpf-sim
+ 04-sim-multilevel_chains	x86		174-350		N		N		N			N	N	N	KILL
+ 04-sim-multilevel_chains	x86_64		4-14		N		N		N			N	N	N	KILL
+ 04-sim-multilevel_chains	x86_64		16-350		N		N		N			N	N	N	KILL
++04-sim-multilevel_chains	x32		4-512		N		N		N			N	N	N	KILL
++04-sim-multilevel_chains	x32		514-560		N		N		N			N	N	N	KILL
+ 
+ test type: bpf-sim-fuzz
+ 
+diff --git a/tests/05-sim-long_jumps.c b/tests/05-sim-long_jumps.c
+index 9acbb91..1359776 100644
+--- a/tests/05-sim-long_jumps.c
++++ b/tests/05-sim-long_jumps.c
+@@ -44,13 +44,13 @@ int main(int argc, char *argv[])
+ 
+ 	/* NOTE - syscalls referenced by number to make the test simpler */
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1, 0);
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1 | X32_BIT, 0);
+ 	if (rc != 0)
+ 		goto out;
+ 
+ 	/* same syscall, many chains */
+ 	for (iter = 0; iter < 100; iter++) {
+-		rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000, 3,
++		rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000 | X32_BIT, 3,
+ 					    SCMP_A0(SCMP_CMP_EQ, iter),
+ 					    SCMP_A1(SCMP_CMP_NE, 0x0),
+ 					    SCMP_A2(SCMP_CMP_LT, SSIZE_MAX));
+@@ -60,13 +60,13 @@ int main(int argc, char *argv[])
+ 
+ 	/* many syscalls, same chain */
+ 	for (iter = 100; iter < 200; iter++) {
+-		rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, iter, 1,
++		rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, iter | X32_BIT, 1,
+ 					    SCMP_A0(SCMP_CMP_NE, 0));
+ 		if (rc != 0)
+ 			goto out;
+ 	}
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 4, 0);
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 4 | X32_BIT, 0);
+ 	if (rc != 0)
+ 		goto out;
+ 
+diff --git a/tests/05-sim-long_jumps.tests b/tests/05-sim-long_jumps.tests
+index 03eb6d9..aed8ebd 100644
+--- a/tests/05-sim-long_jumps.tests
++++ b/tests/05-sim-long_jumps.tests
+@@ -11,11 +11,11 @@ test type: bpf-sim
+ 05-sim-long_jumps	all	1	1	2		3			4	5	6	ALLOW
+ 05-sim-long_jumps	all	2	N	N		N			N	N	N	KILL
+ 05-sim-long_jumps	all	999	N	N		N			N	N	N	KILL
+-05-sim-long_jumps	x86	1000	0-5 	0x856B008	0x7FFFFFFE		N	N	N	ALLOW
+-05-sim-long_jumps	x86_64	1000	0-5 	0x856B008	0x7FFFFFFFFFFFFFFE	N	N	N	ALLOW
+-05-sim-long_jumps	x86	1000	95-99	0x856B008	0x7FFFFFFE		N	N	N	ALLOW
++05-sim-long_jumps	x86,x32	1000	0-5	0x856B008	0x7FFFFFFE		N	N	N	ALLOW
++05-sim-long_jumps	x86_64	1000	0-5	0x856B008	0x7FFFFFFFFFFFFFFE	N	N	N	ALLOW
++05-sim-long_jumps	x86,x32	1000	95-99	0x856B008	0x7FFFFFFE		N	N	N	ALLOW
+ 05-sim-long_jumps	x86_64	1000	95-99	0x856B008	0x7FFFFFFFFFFFFFFE	N	N	N	ALLOW
+-05-sim-long_jumps	x86	1000	100	0x856B008	0x7FFFFFFE		N	N	N	KILL
++05-sim-long_jumps	x86,x32	1000	100	0x856B008	0x7FFFFFFE		N	N	N	KILL
+ 05-sim-long_jumps	x86_64	1000	100	0x856B008	0x7FFFFFFFFFFFFFFE	N	N	N	KILL
+ 05-sim-long_jumps	all	1001	N	N		N			N	N	N	KILL
+ 05-sim-long_jumps	all	99	1	N		N			N	N	N	KILL
+diff --git a/tests/06-sim-actions.tests b/tests/06-sim-actions.tests
+index d0c2e44..cda19f2 100644
+--- a/tests/06-sim-actions.tests
++++ b/tests/06-sim-actions.tests
+@@ -14,7 +14,7 @@ test type: bpf-sim
+ 06-sim-actions	all,-aarch64	open	0x856B008	4		N	N	N	N	TRACE(1234)
+ 06-sim-actions	x86		0-2	N		N		N	N	N	N	KILL
+ 06-sim-actions	x86		7-350	N		N		N	N	N	N	KILL
+-06-sim-actions	x86_64		4-350	N		N		N	N	N	N	KILL
++06-sim-actions	x86_64,x32	4-350	N		N		N	N	N	N	KILL
+ 
+ test type: bpf-sim-fuzz
+ 
+diff --git a/tests/08-sim-subtree_checks.c b/tests/08-sim-subtree_checks.c
+index f3bd857..dddb537 100644
+--- a/tests/08-sim-subtree_checks.c
++++ b/tests/08-sim-subtree_checks.c
+@@ -43,45 +43,45 @@ int main(int argc, char *argv[])
+ 	/* the syscall and argument numbers are all fake to make the test
+ 	 * simpler */
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000 | X32_BIT, 2,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_EQ, 1));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000 | X32_BIT, 1,
+ 				    SCMP_A1(SCMP_CMP_EQ, 1));
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1001, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1001 | X32_BIT, 1,
+ 				    SCMP_A1(SCMP_CMP_EQ, 1));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1001, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1001 | X32_BIT, 2,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_EQ, 1));
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1002, 4,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1002 | X32_BIT, 4,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_EQ, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2),
+ 				    SCMP_A3(SCMP_CMP_EQ, 3));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1002, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1002 | X32_BIT, 2,
+ 				    SCMP_A1(SCMP_CMP_EQ, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2));
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1003, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1003 | X32_BIT, 2,
+ 				    SCMP_A1(SCMP_CMP_EQ, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1003, 4,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1003 | X32_BIT, 4,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_EQ, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2),
+@@ -89,49 +89,49 @@ int main(int argc, char *argv[])
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1004, 4,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1004 | X32_BIT, 4,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_EQ, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2),
+ 				    SCMP_A3(SCMP_CMP_EQ, 3));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1004, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1004 | X32_BIT, 2,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_EQ, 11));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1004, 4,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1004 | X32_BIT, 4,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_EQ, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2),
+ 				    SCMP_A3(SCMP_CMP_EQ, 33));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1004, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1004 | X32_BIT, 2,
+ 				    SCMP_A1(SCMP_CMP_EQ, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2));
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1005, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1005 | X32_BIT, 2,
+ 				    SCMP_A1(SCMP_CMP_EQ, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1005, 4,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1005 | X32_BIT, 4,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_EQ, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2),
+ 				    SCMP_A3(SCMP_CMP_EQ, 3));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1005, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1005 | X32_BIT, 2,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_EQ, 11));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1005, 4,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1005 | X32_BIT, 4,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_EQ, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2),
+@@ -139,32 +139,32 @@ int main(int argc, char *argv[])
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1006, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1006 | X32_BIT, 2,
+ 				    SCMP_A1(SCMP_CMP_NE, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 0));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1006, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1006 | X32_BIT, 2,
+ 				    SCMP_A1(SCMP_CMP_EQ, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1006, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1006 | X32_BIT, 1,
+ 				    SCMP_A1(SCMP_CMP_NE, 1));
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_TRAP, 1007, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_TRAP, 1007 | X32_BIT, 2,
+ 				    SCMP_A2(SCMP_CMP_EQ, 1),
+ 				    SCMP_A3(SCMP_CMP_EQ, 3));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1007, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1007 | X32_BIT, 2,
+ 				    SCMP_A2(SCMP_CMP_EQ, 1),
+ 				    SCMP_A3(SCMP_CMP_NE, 3));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1007, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1007 | X32_BIT, 1,
+ 				    SCMP_A3(SCMP_CMP_NE, 3));
+ 	if (rc != 0)
+ 		goto out;
+diff --git a/tests/09-sim-syscall_priority_pre.c b/tests/09-sim-syscall_priority_pre.c
+index fbcd27d..991950e 100644
+--- a/tests/09-sim-syscall_priority_pre.c
++++ b/tests/09-sim-syscall_priority_pre.c
+@@ -53,16 +53,16 @@ int main(int argc, char *argv[])
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000 | X32_BIT, 2,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_EQ, 1));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1001, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1001 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1002, 0);
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1002 | X32_BIT, 0);
+ 	if (rc != 0)
+ 		goto out;
+ 
+diff --git a/tests/10-sim-syscall_priority_post.c b/tests/10-sim-syscall_priority_post.c
+index 48ed9c0..19383c3 100644
+--- a/tests/10-sim-syscall_priority_post.c
++++ b/tests/10-sim-syscall_priority_post.c
+@@ -43,26 +43,26 @@ int main(int argc, char *argv[])
+ 	/* the syscall and argument numbers are all fake to make the test
+ 	 * simpler */
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000 | X32_BIT, 2,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_EQ, 1));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1001, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1001 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1002, 0);
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1002 | X32_BIT, 0);
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_syscall_priority(ctx, 1000, 3);
++	rc = seccomp_syscall_priority(ctx, 1000 | X32_BIT, 3);
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_syscall_priority(ctx, 1001, 2);
++	rc = seccomp_syscall_priority(ctx, 1001 | X32_BIT, 2);
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_syscall_priority(ctx, 1002, 1);
++	rc = seccomp_syscall_priority(ctx, 1002 | X32_BIT, 1);
+ 	if (rc != 0)
+ 		goto out;
+ 
+diff --git a/tests/12-sim-basic_masked_ops.c b/tests/12-sim-basic_masked_ops.c
+index 1506715..364d5d1 100644
+--- a/tests/12-sim-basic_masked_ops.c
++++ b/tests/12-sim-basic_masked_ops.c
+@@ -43,35 +43,35 @@ int main(int argc, char *argv[])
+ 	/* the syscall and argument numbers are all fake to make the test
+ 	 * simpler */
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000, 3,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000 | X32_BIT, 3,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_EQ, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2));
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000, 3,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000 | X32_BIT, 3,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_MASKED_EQ, 0x00ff, 1),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2));
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000, 3,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000 | X32_BIT, 3,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_MASKED_EQ, 0xffff, 11),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2));
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000, 3,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000 | X32_BIT, 3,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_MASKED_EQ, 0xffff, 111),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2));
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000, 3,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 1000 | X32_BIT, 3,
+ 				    SCMP_A0(SCMP_CMP_EQ, 0),
+ 				    SCMP_A1(SCMP_CMP_MASKED_EQ, 0xff00, 1000),
+ 				    SCMP_A2(SCMP_CMP_EQ, 2));
+diff --git a/tests/14-sim-reset.tests b/tests/14-sim-reset.tests
+index 584fbb0..a3baa88 100644
+--- a/tests/14-sim-reset.tests
++++ b/tests/14-sim-reset.tests
+@@ -7,16 +7,16 @@
+ 
+ test type: bpf-sim
+ 
+-# Testname	Arch	Syscall		Arg0		Arg1		Arg2	Arg3	Arg4	Arg5	Result
+-14-sim-reset	all	read		0		0x856B008	40	N	N	N	KILL
+-14-sim-reset	all	write		1		0x856B008	40	N	N	N	ALLOW
+-14-sim-reset	all	close		4		N		N	N	N	N	KILL
+-14-sim-reset	all	rt_sigreturn	N		N		N	N	N	N	KILL
+-14-sim-reset	all	open		0x856B008	4		N	N	N	N	KILL
+-14-sim-reset	x86	0-3		N		N		N	N	N	N	KILL
+-14-sim-reset	x86	5-360		N		N		N	N	N	N	KILL
+-14-sim-reset	x86_64	0		N		N		N	N	N	N	KILL
+-14-sim-reset	x86_64	2-360		N		N		N	N	N	N	KILL
++# Testname	Arch		Syscall		Arg0		Arg1		Arg2	Arg3	Arg4	Arg5	Result
++14-sim-reset	all		read		0		0x856B008	40	N	N	N	KILL
++14-sim-reset	all		write		1		0x856B008	40	N	N	N	ALLOW
++14-sim-reset	all		close		4		N		N	N	N	N	KILL
++14-sim-reset	all		rt_sigreturn	N		N		N	N	N	N	KILL
++14-sim-reset	all		open		0x856B008	4		N	N	N	N	KILL
++14-sim-reset	x86		0-3		N		N		N	N	N	N	KILL
++14-sim-reset	x86		5-360		N		N		N	N	N	N	KILL
++14-sim-reset	x86_64,x32	0		N		N		N	N	N	N	KILL
++14-sim-reset	x86_64,x32	2-360		N		N		N	N	N	N	KILL
+ 
+ test type: bpf-sim-fuzz
+ 
+diff --git a/tests/18-sim-basic_whitelist.tests b/tests/18-sim-basic_whitelist.tests
+index e02b183..30751f6 100644
+--- a/tests/18-sim-basic_whitelist.tests
++++ b/tests/18-sim-basic_whitelist.tests
+@@ -20,6 +20,8 @@ test type: bpf-sim
+ 18-sim-basic_whitelist	x86	174-350		N		N		N	N	N	N	ALLOW
+ 18-sim-basic_whitelist	x86_64	4-14		N		N		N	N	N	N	ALLOW
+ 18-sim-basic_whitelist	x86_64	16-350		N		N		N	N	N	N	ALLOW
++18-sim-basic_whitelist	x32	4-512		N		N		N	N	N	N	ALLOW
++18-sim-basic_whitelist	x32	514-560		N		N		N	N	N	N	ALLOW
+ 
+ test type: bpf-sim-fuzz
+ 
+diff --git a/tests/22-sim-basic_chains_array.tests b/tests/22-sim-basic_chains_array.tests
+index b8867b7..c68bdb6 100644
+--- a/tests/22-sim-basic_chains_array.tests
++++ b/tests/22-sim-basic_chains_array.tests
+@@ -19,6 +19,8 @@ test type: bpf-sim
+ 22-sim-basic_chains_array	x86	174-350		N		N		N	N	N	N	KILL
+ 22-sim-basic_chains_array	x86_64	4-14		N		N		N	N	N	N	KILL
+ 22-sim-basic_chains_array	x86_64	16-350		N		N		N	N	N	N	KILL
++22-sim-basic_chains_array	x32	4-512		N		N		N	N	N	N	KILL
++22-sim-basic_chains_array	x32	514-560		N		N		N	N	N	N	KILL
+ 
+ test type: bpf-sim-fuzz
+ 
+diff --git a/tests/25-sim-multilevel_chains_adv.c b/tests/25-sim-multilevel_chains_adv.c
+index 870e47f..ba2622b 100644
+--- a/tests/25-sim-multilevel_chains_adv.c
++++ b/tests/25-sim-multilevel_chains_adv.c
+@@ -40,13 +40,13 @@ int main(int argc, char *argv[])
+ 	if (ctx == NULL)
+ 		return ENOMEM;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 10, 2,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 10 | X32_BIT, 2,
+ 				    SCMP_A0(SCMP_CMP_EQ, 11),
+ 				    SCMP_A1(SCMP_CMP_NE, 12));
+ 	if (rc != 0)
+ 		goto out;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 20, 3,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_ALLOW, 20 | X32_BIT, 3,
+ 				    SCMP_A0(SCMP_CMP_EQ, 21),
+ 				    SCMP_A1(SCMP_CMP_NE, 22),
+ 				    SCMP_A2(SCMP_CMP_EQ, 23));
+diff --git a/tests/25-sim-multilevel_chains_adv.tests b/tests/25-sim-multilevel_chains_adv.tests
+index 8b0e202..b91c3c2 100644
+--- a/tests/25-sim-multilevel_chains_adv.tests
++++ b/tests/25-sim-multilevel_chains_adv.tests
+@@ -10,13 +10,13 @@ test type: bpf-sim
+ # Testname			Arch		Syscall		Arg0		Arg1		Arg2		Arg3	Arg4	Arg5	Result
+ 25-sim-multilevel_chains_adv	all		0-9		N		N		N		N	N	N	KILL
+ 25-sim-multilevel_chains_adv	all		10		0x0000000b	0x00000000	N		N	N	N	ALLOW
+-25-sim-multilevel_chains_adv	x86_64		10		0x10000000b	0x00000000	N		N	N	N	KILL
+-25-sim-multilevel_chains_adv	x86_64		10		0x0000000b	0x10000000c	N		N	N	N	ALLOW
++25-sim-multilevel_chains_adv	x86_64,x32	10		0x10000000b	0x00000000	N		N	N	N	KILL
++25-sim-multilevel_chains_adv	x86_64,x32	10		0x0000000b	0x10000000c	N		N	N	N	ALLOW
+ 25-sim-multilevel_chains_adv	all		11-19		N		N		N		N	N	N	KILL
+ 25-sim-multilevel_chains_adv	all		20		0x00000015	0x00000000	0x00000017	N	N	N	ALLOW
+ 25-sim-multilevel_chains_adv	all		20		0x00000015	0x00000016	0x00000017	N	N	N	KILL
+-25-sim-multilevel_chains_adv	x86_64		20		0x100000015	0x00000000	0x00000017	N	N	N	KILL
+-25-sim-multilevel_chains_adv	x86_64		20		0x00000015	0x00000000	0x100000017	N	N	N	KILL
++25-sim-multilevel_chains_adv	x86_64,x32	20		0x100000015	0x00000000	0x00000017	N	N	N	KILL
++25-sim-multilevel_chains_adv	x86_64,x32	20		0x00000015	0x00000000	0x100000017	N	N	N	KILL
+ 25-sim-multilevel_chains_adv	all		21-30		N		N		N		N	N	N	KILL
+ 
+ test type: bpf-sim-fuzz
+diff --git a/tests/27-sim-bpf_blk_state.c b/tests/27-sim-bpf_blk_state.c
+index 2d9b6f2..c9f90d9 100644
+--- a/tests/27-sim-bpf_blk_state.c
++++ b/tests/27-sim-bpf_blk_state.c
+@@ -40,55 +40,55 @@ int main(int argc, char *argv[])
+ 	if (ctx == NULL)
+ 		return ENOMEM;
+ 
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 3));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 4));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 5));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 6));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 7));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 8));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 9));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 11));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 12));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 13));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 14));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_EQ, 15));
+ 	if (rc != 0)
+ 		goto out;
+-	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000, 1,
++	rc = seccomp_rule_add_exact(ctx, SCMP_ACT_KILL, 1000 | X32_BIT, 1,
+ 				    SCMP_A0(SCMP_CMP_GE, 16));
+ 	if (rc != 0)
+ 		goto out;
+diff --git a/tests/30-sim-socket_syscalls.tests b/tests/30-sim-socket_syscalls.tests
+index 9d54b0e..54a0002 100644
+--- a/tests/30-sim-socket_syscalls.tests
++++ b/tests/30-sim-socket_syscalls.tests
+@@ -7,23 +7,23 @@
+ 
+ test type: bpf-sim
+ 
+-# Testname		Arch	Syscall		Arg0		Arg1		Arg2	Arg3	Arg4	Arg5	Result
+-30-sim-socket_syscalls	+x86	socketcall	1		N		N	N	N	N	ALLOW
+-30-sim-socket_syscalls	+x86	socketcall	3		N		N	N	N	N	ALLOW
+-30-sim-socket_syscalls	+x86	socketcall	5		N		N	N	N	N	ALLOW
+-30-sim-socket_syscalls	+x86	socketcall	13		N		N	N	N	N	ALLOW
+-30-sim-socket_syscalls	+x86	359		0		1		2	N	N	N	ALLOW
+-30-sim-socket_syscalls	+x86	362		0		1		2	N	N	N	ALLOW
+-30-sim-socket_syscalls	+x86	364		0		1		2	N	N	N	ALLOW
+-30-sim-socket_syscalls	+x86	373		0		1		2	N	N	N	ALLOW
+-30-sim-socket_syscalls	+x86	accept		5		N		N	N	N	N	ALLOW
+-30-sim-socket_syscalls	+x86	accept		0		1		2	N	N	N	KILL
+-30-sim-socket_syscalls	+x86	accept4		18		1		2	N	N	N	ALLOW
+-30-sim-socket_syscalls	+x86	accept4		0		1		2	N	N	N	KILL
+-30-sim-socket_syscalls	+x86_64	socket		0		1		2	N	N	N	ALLOW
+-30-sim-socket_syscalls	+x86_64	connect		0		1		2	N	N	N	ALLOW
+-30-sim-socket_syscalls	+x86_64	accept4		0		1		2	N	N	N	ALLOW
+-30-sim-socket_syscalls	+x86_64	shutdown	0		1		2	N	N	N	ALLOW
++# Testname		Arch		Syscall		Arg0		Arg1		Arg2	Arg3	Arg4	Arg5	Result
++30-sim-socket_syscalls	+x86		socketcall	1		N		N	N	N	N	ALLOW
++30-sim-socket_syscalls	+x86		socketcall	3		N		N	N	N	N	ALLOW
++30-sim-socket_syscalls	+x86		socketcall	5		N		N	N	N	N	ALLOW
++30-sim-socket_syscalls	+x86		socketcall	13		N		N	N	N	N	ALLOW
++30-sim-socket_syscalls	+x86		359		0		1		2	N	N	N	ALLOW
++30-sim-socket_syscalls	+x86		362		0		1		2	N	N	N	ALLOW
++30-sim-socket_syscalls	+x86		364		0		1		2	N	N	N	ALLOW
++30-sim-socket_syscalls	+x86		373		0		1		2	N	N	N	ALLOW
++30-sim-socket_syscalls	+x86		accept		5		N		N	N	N	N	ALLOW
++30-sim-socket_syscalls	+x86		accept		0		1		2	N	N	N	KILL
++30-sim-socket_syscalls	+x86		accept4		18		1		2	N	N	N	ALLOW
++30-sim-socket_syscalls	+x86		accept4		0		1		2	N	N	N	KILL
++30-sim-socket_syscalls	+x86_64,+x32	socket		0		1		2	N	N	N	ALLOW
++30-sim-socket_syscalls	+x86_64,+x32	connect		0		1		2	N	N	N	ALLOW
++30-sim-socket_syscalls	+x86_64,+x32	accept4		0		1		2	N	N	N	ALLOW
++30-sim-socket_syscalls	+x86_64,+x32	shutdown	0		1		2	N	N	N	ALLOW
+ 
+ test type: bpf-valgrind
+ 
+diff --git a/tests/util.h b/tests/util.h
+index b3c5a29..191dd3c 100644
+--- a/tests/util.h
++++ b/tests/util.h
+@@ -22,6 +22,12 @@
+ #ifndef _UTIL_TEST_H
+ #define _UTIL_TEST_H
+ 
++#if defined(__x86_64__) && defined(__ILP32__)
++#define X32_BIT 0x40000000
++#else
++#define X32_BIT 0
++#endif
++
+ struct util_options {
+ 	int bpf_flg;
+ };
+diff --git a/tools/scmp_bpf_sim.c b/tools/scmp_bpf_sim.c
+index a0cf6d1..c2fa625 100644
+--- a/tools/scmp_bpf_sim.c
++++ b/tools/scmp_bpf_sim.c
+@@ -235,6 +235,7 @@ int main(int argc, char *argv[])
+ 	size_t file_read_len;
+ 	struct seccomp_data sys_data;
+ 	struct bpf_program bpf_prg;
++	int32_t x32bit = 0;
+ 
+ 	/* initialize the syscall record */
+ 	memset(&sys_data, 0, sizeof(sys_data));
+@@ -247,8 +248,10 @@ int main(int argc, char *argv[])
+ 				arch = AUDIT_ARCH_I386;
+ 			else if (strcmp(optarg, "x86_64") == 0)
+ 				arch = AUDIT_ARCH_X86_64;
+-			else if (strcmp(optarg, "x32") == 0)
++			else if (strcmp(optarg, "x32") == 0) {
+ 				arch = AUDIT_ARCH_X86_64;
++				x32bit = 0x40000000;
++			}
+ 			else if (strcmp(optarg, "arm") == 0)
+ 				arch = AUDIT_ARCH_ARM;
+ 			else if (strcmp(optarg, "aarch64") == 0)
+@@ -314,6 +317,9 @@ int main(int argc, char *argv[])
+ 		}
+ 	}
+ 
++	/* adjust x32 syscall nr */
++	sys_data.nr |= x32bit;
++
+ 	/* adjust the endianess of sys_data to match the target */
+ 	sys_data.nr = htot32(arch, sys_data.nr);
+ 	sys_data.arch = htot32(arch, arch);
