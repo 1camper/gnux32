@@ -1,0 +1,32 @@
+https://github.com/seccomp/libseccomp/issues/107
+
+diff -ur a/tests/seccomp.c b/tests/seccomp.c
+--- a/tests/seccomp.c	2016-09-11 11:55:53.000000000 +0200
++++ b/tests/seccomp.c	2018-08-24 23:32:37.184000000 +0200
+@@ -51,10 +51,6 @@
+ 	ADD_SYSCALL(nanosleep, 0);
+ 	ADD_SYSCALL(time, 0);
+ 	ADD_SYSCALL(getpid, 0);
+-	ADD_SYSCALL(gettimeofday, 0);
+-#if defined(HAVE_CLOCK_GETTIME)
+-	ADD_SYSCALL(clock_gettime, 0);
+-#endif
+ 
+ 	ADD_SYSCALL(getrusage, 0);
+ 
+@@ -92,6 +88,15 @@
+ 	ADD_SYSCALL(sigreturn, 0);
+ 	ADD_SYSCALL(rt_sigreturn, 0);
+ 
++	/* clock_gettime and gettimeofday VDSOs on x32 may use x86-64 syscall */
++#if defined(__x86_64__) && defined(__ILP32__)
++	seccomp_arch_add(ctx, SCMP_ARCH_X86_64);
++#endif
++	ADD_SYSCALL(gettimeofday, 0);
++#if defined(HAVE_CLOCK_GETTIME)
++	ADD_SYSCALL(clock_gettime, 0);
++#endif
++
+ 	ret = seccomp_load(ctx);
+ 	if (ret < 0) {
+ 		fprintf(stderr, "could not load seccomp filter");
