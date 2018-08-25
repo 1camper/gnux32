@@ -38,7 +38,7 @@ multilib_src_configure() {
 	[[ ${CHOST} == *-darwin* ]] && filter-flags -O*
 
 	# FIXME: handle backends per arch? What about cross-compiling for the other arches?
-	if [[ "${CHOST}" =~ "x32" ]]; then
+	if [[ "${CHOST}" =~ "x32"  || "${CHOST}" == "i686-pc-linux-gnu" ]]; then
 	ECONF_SOURCE="${S}" econf \
 		--disable-gtk-doc \
 		--enable-backend= \
