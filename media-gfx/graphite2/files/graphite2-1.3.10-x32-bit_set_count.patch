@@ -1,0 +1,39 @@
+diff -ur a/src/inc/bits.h b/src/inc/bits.h
+--- a/src/inc/bits.h	2017-05-05 17:35:18.000000000 +0200
++++ b/src/inc/bits.h	2018-08-26 16:24:53.693132000 +0200
+@@ -78,10 +78,10 @@
+ template<typename T>
+ inline unsigned int bit_set_count(T v)
+ {
+-    v = v - ((v >> 1) & T(~(0UL)/3));                           // temp
+-    v = (v & T(~(0UL)/15*3)) + ((v >> 2) & T(~(0UL)/15*3));     // temp
+-    v = (v + (v >> 4)) & T(~(0UL)/255*15);                      // temp
+-    return (T)(v * T(~(0UL)/255)) >> (sizeof(T)-1)*8;           // count
++    v = v - ((v >> 1) & T(~(0ULL)/3));                          // temp
++    v = (v & T(~(0ULL)/15*3)) + ((v >> 2) & T(~(0ULL)/15*3));   // temp
++    v = (v + (v >> 4)) & T(~(0ULL)/255*15);                     // temp
++    return (T)(v * T(~(0ULL)/255)) >> (sizeof(T)-1)*8;          // count
+ }
+ 
+ #endif
+diff -ur a/tests/bittwiddling/bits.cpp b/tests/bittwiddling/bits.cpp
+--- a/tests/bittwiddling/bits.cpp	2017-05-05 17:35:18.000000000 +0200
++++ b/tests/bittwiddling/bits.cpp	2018-08-26 16:25:58.462132000 +0200
+@@ -38,7 +38,7 @@
+ 
+ using namespace graphite2;
+ 
+-#define maskoff(n) ((unsigned long long)(-1L) >> (8*sizeof(0UL) - n))
++#define maskoff(n) ((unsigned long long)(-1L) >> (8*sizeof(0ULL) - n))
+ 
+ #define pat(b)   0x01##b, 0x03##b, 0x07##b, 0x0f##b
+ #define pat8(b)  pat(b), pat(f##b)
+@@ -47,7 +47,7 @@
+ #define pat64(b) pat32(b), pat32(ffffffff##b)
+ 
+ #define patterns(bw) \
+-    uint##bw const  u##bw##_pat[] = {0, pat##bw(UL) }; \
++    uint##bw const  u##bw##_pat[] = {0, pat##bw(ULL) }; \
+     int##bw const * s##bw##_pat   = reinterpret_cast<int##bw const *>(u##bw##_pat)
+ 
+ //#define BENCHMARK 40000000
