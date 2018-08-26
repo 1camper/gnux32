@@ -1,0 +1,12 @@
+diff -ur a/test/core/core_setup_message.cpp b/test/core/core_setup_message.cpp
+--- a/test/core/core_setup_message.cpp	2018-08-26 13:58:07.277132000 +0200
++++ b/test/core/core_setup_message.cpp	2018-08-26 14:11:12.155132000 +0200
+@@ -185,7 +185,7 @@
+ {
+ 	int Error = 0;
+ 	
+-	Error += ((sizeof(void*) == 4) && (GLM_MODEL == GLM_MODEL_32)) || ((sizeof(void*) == 8) && (GLM_MODEL == GLM_MODEL_64)) ? 0 : 1;
++	Error += ((sizeof(void*) == 4) && (GLM_MODEL == GLM_MODEL_32)) || (((sizeof(void*) == 8) || (sizeof(void*) == 4)) && (GLM_MODEL == GLM_MODEL_64)) ? 0 : 1;
+ 	
+ 	if(GLM_MODEL == GLM_MODEL_32)
+ 		std::printf("GLM_MODEL_32\n");

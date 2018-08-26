@@ -1,0 +1,563 @@
+diff -ur a/test/core/core_func_integer_bit_count.cpp b/test/core/core_func_integer_bit_count.cpp
+--- a/test/core/core_func_integer_bit_count.cpp	2017-08-16 14:15:24.000000000 +0200
++++ b/test/core/core_func_integer_bit_count.cpp	2018-08-26 15:15:14.083132000 +0200
+@@ -4,6 +4,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>     //To define "exit", req'd by XLC.
+ #include <ctime>
++#include <type_traits>
+ 
+ unsigned rotatel(unsigned x, int n)
+ {
+@@ -199,7 +200,7 @@
+ 		if (pop0(test[i]) != test[i+1]) error(test[i], pop0(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("pop0: %ld clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "pop0: %ld clocks\n": "pop0: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -207,7 +208,7 @@
+ 		if (pop1(test[i]) != test[i+1]) error(test[i], pop1(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("pop1: %ld clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "pop1: %ld clocks\n": "pop1: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -215,7 +216,7 @@
+ 		if (pop2(test[i]) != test[i+1]) error(test[i], pop2(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("pop2: %ld clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "pop2: %ld clocks\n": "pop2: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -223,7 +224,7 @@
+ 		if (pop3(test[i]) != test[i+1]) error(test[i], pop3(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("pop3: %ld clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "pop3: %ld clocks\n": "pop3: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -231,7 +232,7 @@
+ 		if (pop4(test[i]) != test[i+1]) error(test[i], pop4(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("pop4: %ld clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "pop4: %ld clocks\n": "pop4: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -239,7 +240,7 @@
+ 		if (pop5(test[i]) != test[i+1]) error(test[i], pop5(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("pop5: %ld clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "pop5: %ld clocks\n": "pop5: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -247,7 +248,7 @@
+ 		if (pop5a(test[i]) != test[i+1]) error(test[i], pop5a(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("pop5a: %ld clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "pop5a: %ld clocks\n": "pop5a: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -255,7 +256,7 @@
+ 		if (pop6(test[i]) != test[i+1]) error(test[i], pop6(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("pop6: %ld clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "pop6: %ld clocks\n": "pop6: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -264,7 +265,7 @@
+ 		if (pop7(test[i]) != test[i+1]) error(test[i], pop7(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("pop7: %ld clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "pop7: %ld clocks\n": "pop7: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -273,7 +274,7 @@
+ 		if (pop8(test[i]) != test[i+1]) error(test[i], pop8(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("pop8: %ld clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "pop8: %ld clocks\n": "pop8: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -282,7 +283,7 @@
+ 		if (pop9(test[i]) != test[i+1]) error(test[i], pop9(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("pop9: %ld clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "pop9: %ld clocks\n": "pop9: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	if (errors == 0)
+ 		printf("Passed all %d cases.\n", sizeof(test)/8);
+diff -ur a/test/core/core_func_integer_find_lsb.cpp b/test/core/core_func_integer_find_lsb.cpp
+--- a/test/core/core_func_integer_find_lsb.cpp	2017-08-16 14:15:24.000000000 +0200
++++ b/test/core/core_func_integer_find_lsb.cpp	2018-08-26 15:05:15.785132000 +0200
+@@ -4,6 +4,7 @@
+ #include <cstdio>
+ #include <cstdlib>     //To define "exit", req'd by XLC.
+ #include <ctime>
++#include <type_traits>
+ 
+ int nlz(unsigned x) {
+    int pop(unsigned x);
+@@ -286,7 +287,7 @@
+ 		if (ntz1(test[i]) != test[i+1]) error(test[i], ntz1(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz1: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz1: %ld clocks\n" : "ntz1: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -294,7 +295,7 @@
+ 		if (ntz2(test[i]) != test[i+1]) error(test[i], ntz2(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz2: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz2: %ld clocks\n" : "ntz2: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -302,7 +303,7 @@
+ 		if (ntz3(test[i]) != test[i+1]) error(test[i], ntz3(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz3: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz3: %ld clocks\n" : "ntz3: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -310,7 +311,7 @@
+ 		if (ntz4(test[i]) != test[i+1]) error(test[i], ntz4(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz4: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz4: %ld clocks\n" : "ntz4: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -318,7 +319,7 @@
+ 		if (ntz4a(test[i]) != test[i+1]) error(test[i], ntz4a(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz4a: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz4a: %ld clocks\n" : "ntz4a: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -327,7 +328,7 @@
+ 		if (ntz5(test[i]) != m) error(test[i], ntz5(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz5: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz5: %ld clocks\n" : "ntz5: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -335,7 +336,7 @@
+ 		if (ntz6(test[i]) != test[i+1]) error(test[i], ntz6(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz6: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz6: %ld clocks\n" : "ntz6: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -343,7 +344,7 @@
+ 		if (ntz6a(test[i]) != test[i+1]) error(test[i], ntz6a(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz6a: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz6a: %ld clocks\n" : "ntz6a: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -351,7 +352,7 @@
+ 		if (ntz7(test[i]) != test[i+1]) error(test[i], ntz7(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz7: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz7: %ld clocks\n" : "ntz7: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -359,7 +360,7 @@
+ 		if (ntz7_christophe(test[i]) != test[i+1]) error(test[i], ntz7(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz7_christophe: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz7_christophe: %ld clocks\n" : "ntz7_christophe: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -367,7 +368,7 @@
+ 		if (ntz8(test[i]) != test[i+1]) error(test[i], ntz8(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz8: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz8: %ld clocks\n" : "ntz8: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -375,7 +376,7 @@
+ 		if (ntz8a(test[i]) != test[i+1]) error(test[i], ntz8a(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz8a: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz8a: %ld clocks\n" : "ntz8a: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -383,7 +384,7 @@
+ 		if (ntz9(test[i]) != test[i+1]) error(test[i], ntz9(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz9: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz9: %ld clocks\n" : "ntz9: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -391,7 +392,7 @@
+ 		if (ntz10(test[i]) != test[i+1]) error(test[i], ntz10(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("ntz10: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "ntz10: %ld clocks\n" : "ntz10: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	if (errors == 0)
+ 		printf("Passed all %d cases.\n", sizeof(test)/8);
+diff -ur a/test/core/core_func_integer_find_msb.cpp b/test/core/core_func_integer_find_msb.cpp
+--- a/test/core/core_func_integer_find_msb.cpp	2017-08-16 14:15:24.000000000 +0200
++++ b/test/core/core_func_integer_find_msb.cpp	2018-08-26 15:18:32.772132000 +0200
+@@ -5,6 +5,7 @@
+ #include <cstdio>
+ #include <cstdlib>     // To define "exit", req'd by XLC.
+ #include <ctime>
++#include <type_traits>
+ 
+ #define LE 1            // 1 for little-endian, 0 for big-endian.
+ 
+@@ -325,7 +326,7 @@
+ 		if (nlz1(test[i]) != test[i+1]) error(test[i], nlz1(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz1: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz1: %ld clocks\n" : "nlz1: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -333,7 +334,7 @@
+ 		if (nlz1a(test[i]) != test[i+1]) error(test[i], nlz1a(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz1a: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz1a: %ld clocks\n" : "nlz1a: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -341,7 +342,7 @@
+ 		if (nlz2(test[i]) != test[i+1]) error(test[i], nlz2(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz2: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz2: %ld clocks\n" : "nlz2: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -349,7 +350,7 @@
+ 		if (nlz2a(test[i]) != test[i+1]) error(test[i], nlz2a(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz2a: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz2a: %ld clocks\n" : "nlz2a: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -357,7 +358,7 @@
+ 		if (nlz3(test[i]) != test[i+1]) error(test[i], nlz3(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz3: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz3: %ld clocks\n" : "nlz3: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -365,7 +366,7 @@
+ 		if (nlz4(test[i]) != test[i+1]) error(test[i], nlz4(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz4: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz4: %ld clocks\n" : "nlz4: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -373,7 +374,7 @@
+ 		if (nlz5(test[i]) != test[i+1]) error(test[i], nlz5(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz5: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz5: %ld clocks\n" : "nlz5: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -381,7 +382,7 @@
+ 		if (nlz6(test[i]) != test[i+1]) error(test[i], nlz6(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz6: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz6: %ld clocks\n" : "nlz6: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -389,7 +390,7 @@
+ 		if (nlz7(test[i]) != test[i+1]) error(test[i], nlz7(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz7: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz7: %ld clocks\n" : "nlz7: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -397,7 +398,7 @@
+ 		if (nlz8(test[i]) != test[i+1]) error(test[i], nlz8(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz8: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz8: %ld clocks\n" : "nlz8: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -405,7 +406,7 @@
+ 		if (nlz9(test[i]) != test[i+1]) error(test[i], nlz9(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz9: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz9: %ld clocks\n" : "nlz9: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -413,7 +414,7 @@
+ 		if (nlz10(test[i]) != test[i+1]) error(test[i], nlz10(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz10: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz10: %ld clocks\n" : "nlz10: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -421,7 +422,7 @@
+ 		if (nlz10a(test[i]) != test[i+1]) error(test[i], nlz10a(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz10a: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz10a: %ld clocks\n" : "nlz10a: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	TimestampBeg = std::clock();
+ 	for (std::size_t k = 0; k < Count; ++k)
+@@ -429,7 +430,7 @@
+ 		if (nlz10b(test[i]) != test[i+1]) error(test[i], nlz10b(test[i]));}
+ 	TimestampEnd = std::clock();
+ 
+-	printf("nlz10b: %d clocks\n", TimestampEnd - TimestampBeg);
++	printf(std::is_same<long, std::clock_t>::value ? "nlz10b: %ld clocks\n" : "nlz10b: %lld clocks\n", TimestampEnd - TimestampBeg);
+ 
+ 	if (errors == 0)
+ 		printf("Passed all %d cases.\n", sizeof(test)/8);
+diff -ur a/test/core/core_func_matrix.cpp b/test/core/core_func_matrix.cpp
+--- a/test/core/core_func_matrix.cpp	2017-08-16 14:15:24.000000000 +0200
++++ b/test/core/core_func_matrix.cpp	2018-08-26 14:56:22.998132000 +0200
+@@ -5,6 +5,7 @@
+ #include <vector>
+ #include <ctime>
+ #include <cstdio>
++#include <type_traits>
+ 
+ using namespace glm;
+ 
+@@ -248,7 +249,7 @@
+ 	//glm::uint Ulp = 0;
+ 	//Ulp = glm::max(glm::float_distance(*Dst, *Src), Ulp);
+ 
+-	printf("inverse<%s>(%f): %lu\n", Message, Diff, EndTime - StartTime);
++	printf(std::is_same<long, std::clock_t>::value ? "inverse<%s>(%f): %ld\n" : "inverse<%s>(%f): %lld\n", Message, Diff, EndTime - StartTime);
+ 
+ 	return 0;
+ }
+diff -ur a/test/core/core_type_vec4.cpp b/test/core/core_type_vec4.cpp
+--- a/test/core/core_type_vec4.cpp	2017-08-16 14:15:24.000000000 +0200
++++ b/test/core/core_type_vec4.cpp	2018-08-26 14:57:35.295132000 +0200
+@@ -7,6 +7,7 @@
+ #include <cstdio>
+ #include <ctime>
+ #include <vector>
++#include <type_traits>
+ 
+ static glm::vec4 v1;
+ static glm::vec4 v2(1);
+@@ -413,7 +414,7 @@
+ 
+ 	std::clock_t EndTime = std::clock();
+ 
+-	std::printf("AoS: %ld\n", EndTime - StartTime);
++	std::printf(std::is_same<long, std::clock_t>::value ? "AoS: %ld\n" : "AoS: %lld\n", EndTime - StartTime);
+ 
+ 	return Error;
+ }
+@@ -452,7 +453,7 @@
+ 
+ 	std::clock_t EndTime = std::clock();
+ 
+-	std::printf("SoA: %ld\n", EndTime - StartTime);
++	std::printf(std::is_same<long, std::clock_t>::value ? "SoA: %ld\n" : "SoA: %lld\n", EndTime - StartTime);
+ 
+ 	return Error;
+ }
+diff -ur a/test/gtc/gtc_integer.cpp b/test/gtc/gtc_integer.cpp
+--- a/test/gtc/gtc_integer.cpp	2017-08-16 14:15:24.000000000 +0200
++++ b/test/gtc/gtc_integer.cpp	2018-08-26 15:09:22.986132000 +0200
+@@ -12,6 +12,7 @@
+ #include <cstdio>
+ #include <vector>
+ #include <cmath>
++#include <type_traits>
+ 
+ namespace log2_
+ {
+@@ -67,7 +68,7 @@
+ 
+ 			std::clock_t End = clock();
+ 
+-			printf("glm::log2<int>: %ld clocks\n", End - Begin);
++			printf(std::is_same<long, std::clock_t>::value ? "glm::log2<int>: %ld clocks\n" : "glm::log2<int>: %lld clocks\n", End - Begin);
+ 		}
+ 
+ 		{
+@@ -81,7 +82,7 @@
+ 
+ 			std::clock_t End = clock();
+ 
+-			printf("glm::log2<ivec4>: %ld clocks\n", End - Begin);
++			printf(std::is_same<long, std::clock_t>::value ? "glm::log2<ivec4>: %ld clocks\n" : "glm::log2<ivec4>: %lld clocks\n", End - Begin);
+ 		}
+ 
+ #		if GLM_HAS_BITSCAN_WINDOWS
+@@ -103,7 +104,7 @@
+ 
+ 			std::clock_t End = clock();
+ 
+-			printf("glm::log2<ivec4> inlined: %ld clocks\n", End - Begin);
++			printf(std::is_same<long, std::clock_t>::value ? "glm::log2<ivec4> inlined: %ld clocks\n" :"glm::log2<ivec4> inlined: %lld clocks\n", End - Begin);
+ 		}
+ 
+ 
+@@ -123,7 +124,7 @@
+ 
+ 			std::clock_t End = clock();
+ 
+-			printf("glm::log2<ivec4> inlined no cast: %ld clocks\n", End - Begin);
++			printf(std::is_same<long, std::clock_t>::value ? "glm::log2<ivec4> inlined no cast: %ld clocks\n" : "glm::log2<ivec4> inlined no cast: %lld clocks\n", End - Begin);
+ 		}
+ 
+ 
+@@ -143,7 +144,7 @@
+ 
+ 			std::clock_t End = clock();
+ 
+-			printf("glm::log2<ivec4> reinterpret: %ld clocks\n", End - Begin);
++			printf(std::is_same<long, std::clock_t>::value ? "glm::log2<ivec4> reinterpret: %ld clocks\n" : "glm::log2<ivec4> reinterpret: %lld clocks\n", End - Begin);
+ 		}
+ #		endif//GLM_HAS_BITSCAN_WINDOWS
+ 
+@@ -158,7 +159,7 @@
+ 
+ 			std::clock_t End = clock();
+ 
+-			printf("glm::log2<float>: %ld clocks\n", End - Begin);
++			printf(std::is_same<long, std::clock_t>::value ? "glm::log2<float>: %ld clocks\n" : "glm::log2<float>: %lld clocks\n", End - Begin);
+ 		}
+ 
+ 		{
+@@ -172,7 +173,7 @@
+ 
+ 			std::clock_t End = clock();
+ 
+-			printf("glm::log2<vec4>: %ld clocks\n", End - Begin);
++			printf(std::is_same<long, std::clock_t>::value ? "glm::log2<vec4>: %ld clocks\n" : "glm::log2<vec4>: %lld clocks\n", End - Begin);
+ 		}
+ 
+ 		return Error;
+diff -ur a/test/gtx/gtx_fast_trigonometry.cpp b/test/gtx/gtx_fast_trigonometry.cpp
+--- a/test/gtx/gtx_fast_trigonometry.cpp	2017-08-16 14:15:24.000000000 +0200
++++ b/test/gtx/gtx_fast_trigonometry.cpp	2018-08-26 15:12:31.299132000 +0200
+@@ -10,6 +10,7 @@
+ #include <ctime>
+ #include <cstdio>
+ #include <vector>
++#include <type_traits>
+ 
+ namespace fastCos
+ {
+@@ -243,7 +244,7 @@
+ 
+ 		std::clock_t const TimeStampEnd = std::clock();
+ 
+-		std::printf("fastCosNew %ld clocks\n", TimeStampEnd - TimeStampBegin);
++		std::printf(std::is_same<long, std::clock_t>::value ? "fastCosNew %ld clocks\n" : "fastCosNew %lld clocks\n", TimeStampEnd - TimeStampBegin);
+ 
+ 		int Error = 0;
+ 		for(std::size_t i = 0; i < Samples; ++i)
+@@ -284,7 +285,7 @@
+ 
+ 		std::clock_t const TimeStampEnd = std::clock();
+ 
+-		std::printf("fastCosDeterminisctic %ld clocks\n", TimeStampEnd - TimeStampBegin);
++		std::printf(std::is_same<long, std::clock_t>::value ? "fastCosDeterminisctic %ld clocks\n" : "fastCosDeterminisctic %lld clocks\n", TimeStampEnd - TimeStampBegin);
+ 
+ 		int Error = 0;
+ 		for(std::size_t i = 0; i < Samples; ++i)
+@@ -331,7 +332,7 @@
+ 
+ 		std::clock_t const TimeStampEnd = std::clock();
+ 
+-		std::printf("fastCosRef %ld clocks\n", TimeStampEnd - TimeStampBegin);
++		std::printf(std::is_same<long, std::clock_t>::value ? "fastCosRef %ld clocks\n" : "fastCosRef %lld clocks\n", TimeStampEnd - TimeStampBegin);
+ 
+ 		int Error = 0;
+ 		for(std::size_t i = 0; i < Samples; ++i)
+@@ -353,7 +354,7 @@
+ 
+ 		std::clock_t const TimeStampEnd = std::clock();
+ 
+-		std::printf("fastCosOld %ld clocks\n", TimeStampEnd - TimeStampBegin);
++		std::printf(std::is_same<long, std::clock_t>::value ? "fastCosOld %ld clocks\n" : "fastCosOld %lld clocks\n", TimeStampEnd - TimeStampBegin);
+ 
+ 		int Error = 0;
+ 		for(std::size_t i = 0; i < Samples; ++i)
+@@ -375,7 +376,7 @@
+ 
+ 		std::clock_t const TimeStampEnd = std::clock();
+ 
+-		std::printf("cos %ld clocks\n", TimeStampEnd - TimeStampBegin);
++		std::printf(std::is_same<long, std::clock_t>::value ? "cos %ld clocks\n" : "cos %lld clocks\n", TimeStampEnd - TimeStampBegin);
+ 
+ 		int Error = 0;
+ 		for(std::size_t i = 0; i < Samples; ++i)
