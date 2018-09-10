@@ -1,0 +1,97 @@
+From 1b99781a14704d5d8bd1073b04a622e83701f2d0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 9 Sep 2018 22:52:35 +0200
+Subject: [PATCH 10/16] x32 support: vp9
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I0a9b110a392b72cc3ec6b5131ba73b1d38eb4455
+---
+ vp9/encoder/x86/vp9_error_sse2.asm            |  2 ++
+ vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm | 27 +++++++++++++++++----------
+ 2 files changed, 19 insertions(+), 10 deletions(-)
+
+diff --git a/vp9/encoder/x86/vp9_error_sse2.asm b/vp9/encoder/x86/vp9_error_sse2.asm
+index 5b0238272..a97afb214 100644
+--- a/vp9/encoder/x86/vp9_error_sse2.asm
++++ b/vp9/encoder/x86/vp9_error_sse2.asm
+@@ -19,6 +19,7 @@ SECTION .text
+ 
+ INIT_XMM sse2
+ cglobal block_error, 3, 3, 8, uqc, dqc, size, ssz
++  movsxifnidn sizeq, sizep
+   pxor      m4, m4                 ; sse accumulator
+   pxor      m6, m6                 ; ssz accumulator
+   pxor      m5, m5                 ; dedicated zero register
+@@ -81,6 +82,7 @@ cglobal block_error, 3, 3, 8, uqc, dqc, size, ssz
+ 
+ INIT_XMM sse2
+ cglobal block_error_fp, 3, 3, 6, uqc, dqc, size
++  movsxifnidn sizeq, sizep
+   pxor      m4, m4                 ; sse accumulator
+   pxor      m5, m5                 ; dedicated zero register
+   lea     uqcq, [uqcq+sizeq*2]
+diff --git a/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm b/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm
+index ec61c0c3a..53c0bc638 100644
+--- a/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm
++++ b/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm
+@@ -17,6 +17,13 @@ pw_1: times 8 dw 1
+ 
+ SECTION .text
+ 
++;void vp9_quantize_*(const tran_low_t *coeff_ptr, intptr_t n_coeffs,
++;                    int skip_block, const int16_t *round_ptr,
++;                    const int16_t *quant_ptr, tran_low_t *qcoeff_ptr,
++;                    tran_low_t *dqcoeff_ptr, const int16_t *dequant_ptr,
++;                    uint16_t eob_ptr, const int16_t *scan,
++;                    const int16_t *iscan)
++
+ %macro QUANTIZE_FP 2
+ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+                                 shift, qcoeff, dqcoeff, dequant, \
+@@ -25,12 +32,12 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+   jne .blank
+ 
+   ; actual quantize loop - setup pointers, rounders, etc.
+-  movifnidn                   coeffq, coeffmp
+-  movifnidn                  ncoeffq, ncoeffmp
+-  mov                             r2, dequantmp
+-  movifnidn                    zbinq, zbinmp
+-  movifnidn                   roundq, roundmp
+-  movifnidn                   quantq, quantmp
++  movifnidn                   coeffp, coeffmx
++  movsxdifnidn               ncoeffq, ncoeffmx
++  mov                            r2p, dequantmx
++  movifnidn                    zbinp, zbinmx
++  movifnidn                   roundp, roundmx
++  movifnidn                   quantp, quantmx
+   mova                            m1, [roundq]             ; m1 = round
+   mova                            m2, [quantq]             ; m2 = quant
+ %ifidn %1, fp_32x32
+@@ -40,9 +47,9 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+   psrlw                           m1, 1                    ; m1 = (m1 + 1) / 2
+ %endif
+   mova                            m3, [r2q]                ; m3 = dequant
+-  mov                             r3, qcoeffmp
+-  mov                             r4, dqcoeffmp
+-  mov                             r5, iscanmp
++  mov                             r3p, qcoeffmx
++  mov                             r4p, dqcoeffmx
++  mov                             r5p, iscanmx
+ %ifidn %1, fp_32x32
+   psllw                           m2, 1
+ %endif
+@@ -163,7 +170,7 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ 
+ .accumulate_eob:
+   ; horizontally accumulate/max eobs and write into [eob] memory pointer
+-  mov                             r2, eobmp
++  mov                            r2p, eobmx
+   pshufd                          m7, m8, 0xe
+   pmaxsw                          m8, m7
+   pshuflw                         m7, m8, 0xe
+-- 
+2.16.4
+

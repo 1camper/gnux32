@@ -1,0 +1,259 @@
+From 99e1430a6b14e480877344f6cc78f61ca92e77d2 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 9 Sep 2018 22:51:40 +0200
+Subject: [PATCH 08/12] x32 support: x86inc.asm
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I5916fda0da61530665a7dbad97fb3ef2b737b596
+---
+ third_party/x86inc/x86inc.asm | 85 ++++++++++++++++++++++++++++++++++---------
+ 1 file changed, 68 insertions(+), 17 deletions(-)
+
+diff --git a/third_party/x86inc/x86inc.asm b/third_party/x86inc/x86inc.asm
+index b647dff2f..fe0939db6 100644
+--- a/third_party/x86inc/x86inc.asm
++++ b/third_party/x86inc/x86inc.asm
+@@ -67,10 +67,14 @@
+ %endif
+ 
+ %define FORMAT_ELF 0
++%define ABI_X32 0
+ %ifidn __OUTPUT_FORMAT__,elf
+     %define FORMAT_ELF 1
+ %elifidn __OUTPUT_FORMAT__,elf32
+     %define FORMAT_ELF 1
++%elifidn __OUTPUT_FORMAT__,elfx32
++    %define FORMAT_ELF 1
++    %define ABI_X32 1
+ %elifidn __OUTPUT_FORMAT__,elf64
+     %define FORMAT_ELF 1
+ %endif
+@@ -245,27 +249,37 @@
+ 
+ ; registers:
+ ; rN and rNq are the native-size register holding function argument N
+-; rNd, rNw, rNb are dword, word, and byte size
++; rNp, rNd, rNw, rNb are pointer, dword, word, and byte size
+ ; rNh is the high 8 bits of the word size
+ ; rNm is the original location of arg N (a register or on the stack), dword
+ ; rNmp is native size
++; rNmx is pointer size
+ 
+ %macro DECLARE_REG 2-3
+     %define r%1q %2
++    %define r%1p %2p
+     %define r%1d %2d
+     %define r%1w %2w
+     %define r%1b %2b
+     %define r%1h %2h
+     %define %2q %2
++    %if ABI_X32
++        %define %2p %2d
++    %else
++        %define %2p %2
++    %endif
+     %if %0 == 2
+         %define r%1m  %2d
+         %define r%1mp %2
+-    %elif ARCH_X86_64 ; memory
+-        %define r%1m [rstk + stack_offset + %3]
+-        %define r%1mp qword r %+ %1 %+ m
++        %define r%1mx %2p
+     %else
+-        %define r%1m [rstk + stack_offset + %3]
+-        %define r%1mp dword r %+ %1 %+ m
++        %define r%1m [rstk + stack_offset + %3] ; memory
++        %define r%1mx pword r %+ %1 %+ m
++        %if ARCH_X86_64
++            %define r%1mp qword r %+ %1 %+ m
++        %else
++            %define r%1mp dword r %+ %1 %+ m
++        %endif
+     %endif
+     %define r%1  %2
+ %endmacro
+@@ -281,6 +295,13 @@
+     %define e%1h %3
+     %define r%1b %2
+     %define e%1b %2
++    %if ABI_X32
++        %define r%1p e%1
++        %define e%1p e%1
++    %else
++        %define r%1p r%1
++        %define e%1p r%1
++    %endif
+     %if ARCH_X86_64 == 0
+         %define r%1 e%1
+     %endif
+@@ -293,6 +314,7 @@ DECLARE_REG_SIZE dx, dl, dh
+ DECLARE_REG_SIZE si, sil, null
+ DECLARE_REG_SIZE di, dil, null
+ DECLARE_REG_SIZE bp, bpl, null
++DECLARE_REG_SIZE sp, spl, null
+ 
+ ; t# defines for when per-arch register allocation is more complex than just function arguments
+ 
+@@ -308,6 +330,7 @@ DECLARE_REG_SIZE bp, bpl, null
+ %macro DECLARE_REG_TMP_SIZE 0-*
+     %rep %0
+         %define t%1q t%1 %+ q
++        %define t%1p t%1 %+ p
+         %define t%1d t%1 %+ d
+         %define t%1w t%1 %+ w
+         %define t%1h t%1 %+ h
+@@ -324,6 +347,16 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     %define gprsize 4
+ %endif
+ 
++%if ARCH_X86_64 && ABI_X32 == 0
++    %define ptrsize 8
++    %define pword qword
++    %define resp resq
++%else
++    %define ptrsize 4
++    %define pword dword
++    %define resp resd
++%endif
++
+ %macro PUSH 1
+     push %1
+     %ifidn rstk, rsp
+@@ -369,6 +402,8 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     sub %1, %2
+     %ifidn %1, rstk
+         %assign stack_offset stack_offset+(%2)
++    %elifidn %1, rstkp
++        %assign stack_offset stack_offset+(%2)
+     %endif
+ %endmacro
+ 
+@@ -376,6 +411,8 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     add %1, %2
+     %ifidn %1, rstk
+         %assign stack_offset stack_offset-(%2)
++    %elifidn %1, rstkp
++        %assign stack_offset stack_offset-(%2)
+     %endif
+ %endmacro
+ 
+@@ -391,6 +428,14 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     %endif
+ %endmacro
+ 
++%macro movsxpq 2
++    %if ABI_X32
++        movsxd %1, %2
++    %else
++        movifnidn %1, %2
++    %endif
++%endmacro
++
+ %macro ASSERT 1
+     %if (%1) == 0
+         %error assertion ``%1'' failed
+@@ -402,12 +447,14 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+         %assign %%i 0
+         %rep n_arg_names
+             CAT_UNDEF arg_name %+ %%i, q
++            CAT_UNDEF arg_name %+ %%i, p
+             CAT_UNDEF arg_name %+ %%i, d
+             CAT_UNDEF arg_name %+ %%i, w
+             CAT_UNDEF arg_name %+ %%i, h
+             CAT_UNDEF arg_name %+ %%i, b
+             CAT_UNDEF arg_name %+ %%i, m
+             CAT_UNDEF arg_name %+ %%i, mp
++            CAT_UNDEF arg_name %+ %%i, mx
+             CAT_UNDEF arg_name, %%i
+             %assign %%i %%i+1
+         %endrep
+@@ -418,12 +465,14 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     %assign %%i 0
+     %rep %0
+         %xdefine %1q r %+ %%i %+ q
++        %xdefine %1p r %+ %%i %+ p
+         %xdefine %1d r %+ %%i %+ d
+         %xdefine %1w r %+ %%i %+ w
+         %xdefine %1h r %+ %%i %+ h
+         %xdefine %1b r %+ %%i %+ b
+         %xdefine %1m r %+ %%i %+ m
+         %xdefine %1mp r %+ %%i %+ mp
++        %xdefine %1mx r %+ %%i %+ mx
+         CAT_XDEFINE arg_name, %%i, %1
+         %assign %%i %%i+1
+         %rotate 1
+@@ -454,25 +503,26 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+             %if required_stack_alignment <= STACK_ALIGNMENT
+                 ; maintain the current stack alignment
+                 %assign stack_size_padded stack_size + %%pad + ((-%%pad-stack_offset-gprsize) & (STACK_ALIGNMENT-1))
+-                SUB rsp, stack_size_padded
++                SUB rspp, stack_size_padded
+             %else
+                 %assign %%reg_num (regs_used - 1)
+                 %xdefine rstk r %+ %%reg_num
++                %xdefine rstkp r %+ %%reg_num %+ p
+                 ; align stack, and save original stack location directly above
+                 ; it, i.e. in [rsp+stack_size_padded], so we can restore the
+-                ; stack in a single instruction (i.e. mov rsp, rstk or mov
+-                ; rsp, [rsp+stack_size_padded])
++                ; stack in a single instruction (i.e. mov rspp, rstkp or mov
++                ; rspp, [rsp+stack_size_padded])
+                 %if %1 < 0 ; need to store rsp on stack
+                     %xdefine rstkm [rsp + stack_size + %%pad]
+                     %assign %%pad %%pad + gprsize
+                 %else ; can keep rsp in rstk during whole function
+-                    %xdefine rstkm rstk
++                    %xdefine rstkm rstkp
+                 %endif
+                 %assign stack_size_padded stack_size + ((%%pad + required_stack_alignment-1) & ~(required_stack_alignment-1))
+-                mov rstk, rsp
+-                and rsp, ~(required_stack_alignment-1)
+-                sub rsp, stack_size_padded
+-                movifnidn rstkm, rstk
++                mov rstkp, rspp
++                and rspp, ~(required_stack_alignment-1)
++                sub rspp, stack_size_padded
++                movifnidn rstkm, rstkp
+             %endif
+             WIN64_PUSH_XMM
+         %endif
+@@ -642,9 +692,9 @@ DECLARE_REG 14, R15, 72
+ %macro RET 0
+     %if stack_size_padded > 0
+         %if required_stack_alignment > STACK_ALIGNMENT
+-            mov rsp, rstkm
++            mov rspp, rstkm
+         %else
+-            add rsp, stack_size_padded
++            add rspp, stack_size_padded
+         %endif
+     %endif
+     POP_IF_USED 14, 13, 12, 11, 10, 9
+@@ -663,12 +713,12 @@ DECLARE_REG 3, ebx, 16
+ DECLARE_REG 4, esi, 20
+ DECLARE_REG 5, edi, 24
+ DECLARE_REG 6, ebp, 28
+-%define rsp esp
+ 
+ %macro DECLARE_ARG 1-*
+     %rep %0
+         %define r%1m [rstk + stack_offset + 4*%1 + 4]
+         %define r%1mp dword r%1m
++        %define r%1mx pword r%1m
+         %rotate 1
+     %endrep
+ %endmacro
+@@ -824,6 +874,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
+     %2:
+     RESET_MM_PERMUTATION        ; needed for x86-64, also makes disassembly somewhat nicer
+     %xdefine rstk rsp           ; copy of the original stack pointer, used when greater alignment than the known stack alignment is required
++    %xdefine rstkp rspp
+     %assign stack_offset 0      ; stack pointer offset relative to the return address
+     %assign stack_size 0        ; amount of stack space that can be freely used inside a function
+     %assign stack_size_padded 0 ; total amount of allocated stack space, including space for callee-saved xmm registers on WIN64 and alignment padding
+-- 
+2.16.4
+

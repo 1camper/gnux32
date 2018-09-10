@@ -1,0 +1,31 @@
+From 5404232e4551d03c5a0bcdec30dcf22343d0e520 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 9 Sep 2018 16:45:04 +0200
+Subject: [PATCH 01/12] sanitizer: don't call non-static function for
+ non-existing object
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I70e4943170deefc7d61a9ae725bb3bd18d56f4e6
+---
+ third_party/googletest/src/include/gtest/gtest.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/third_party/googletest/src/include/gtest/gtest.h b/third_party/googletest/src/include/gtest/gtest.h
+index f846c5bd6..2bd1e97f6 100644
+--- a/third_party/googletest/src/include/gtest/gtest.h
++++ b/third_party/googletest/src/include/gtest/gtest.h
+@@ -1752,7 +1752,7 @@ class WithParamInterface {
+   // references static data, to reduce the opportunity for incorrect uses
+   // like writing 'WithParamInterface<bool>::GetParam()' for a test that
+   // uses a fixture whose parameter type is int.
+-  const ParamType& GetParam() const {
++  static const ParamType& GetParam() {
+     GTEST_CHECK_(parameter_ != NULL)
+         << "GetParam() can only be called inside a value-parameterized test "
+         << "-- did you intend to write TEST_P instead of TEST_F?";
+-- 
+2.16.4
+

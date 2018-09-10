@@ -1,0 +1,118 @@
+From 270c4434116cab119e188f5b5e5550ffd073e172 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Mon, 10 Sep 2018 15:00:33 +0200
+Subject: [PATCH 16/16] rebase v1.6.0_x32->v1.5.0_x32 extra
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I0fe3c5ac2db25e3a9798e7f119e7b28eeb6a85ca
+---
+ vp9/encoder/x86/vp9_dct_mmx.asm                  |  1 +
+ vp9/encoder/x86/vp9_dct_ssse3_x86_64.asm         |  1 +
+ vp9/encoder/x86/vp9_error_sse2.asm               |  4 ++--
+ vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm |  5 ++++-
+ vpx_dsp/x86/variance_impl_mmx.asm                | 10 +++++-----
+ 5 files changed, 13 insertions(+), 8 deletions(-)
+
+diff --git a/vp9/encoder/x86/vp9_dct_mmx.asm b/vp9/encoder/x86/vp9_dct_mmx.asm
+index 7a7a6b655..c81607610 100644
+--- a/vp9/encoder/x86/vp9_dct_mmx.asm
++++ b/vp9/encoder/x86/vp9_dct_mmx.asm
+@@ -49,6 +49,7 @@ SECTION .text
+ 
+ INIT_MMX mmx
+ cglobal fwht4x4, 3, 4, 8, input, output, stride
++  movsxdifnidn strideq, stridep
+   lea             r3q,       [inputq + strideq*4]
+   movq            m0,        [inputq] ;a1
+   movq            m1,        [inputq + strideq*2] ;b1
+diff --git a/vp9/encoder/x86/vp9_dct_ssse3_x86_64.asm b/vp9/encoder/x86/vp9_dct_ssse3_x86_64.asm
+index 74c52df19..11d7566f2 100644
+--- a/vp9/encoder/x86/vp9_dct_ssse3_x86_64.asm
++++ b/vp9/encoder/x86/vp9_dct_ssse3_x86_64.asm
+@@ -89,6 +89,7 @@ SECTION .text
+ 
+ INIT_XMM ssse3
+ cglobal hadamard_8x8, 3, 5, 10, input, stride, output
++  movsxdifnidn  strideq, stridep
+   lea                r3, [2 * strideq]
+   lea                r4, [4 * strideq]
+ 
+diff --git a/vp9/encoder/x86/vp9_error_sse2.asm b/vp9/encoder/x86/vp9_error_sse2.asm
+index a97afb214..55ee22322 100644
+--- a/vp9/encoder/x86/vp9_error_sse2.asm
++++ b/vp9/encoder/x86/vp9_error_sse2.asm
+@@ -19,7 +19,7 @@ SECTION .text
+ 
+ INIT_XMM sse2
+ cglobal block_error, 3, 3, 8, uqc, dqc, size, ssz
+-  movsxifnidn sizeq, sizep
++  movsxdifnidn sizeq, sizep
+   pxor      m4, m4                 ; sse accumulator
+   pxor      m6, m6                 ; ssz accumulator
+   pxor      m5, m5                 ; dedicated zero register
+@@ -82,7 +82,7 @@ cglobal block_error, 3, 3, 8, uqc, dqc, size, ssz
+ 
+ INIT_XMM sse2
+ cglobal block_error_fp, 3, 3, 6, uqc, dqc, size
+-  movsxifnidn sizeq, sizep
++  movsxdifnidn sizeq, sizep
+   pxor      m4, m4                 ; sse accumulator
+   pxor      m5, m5                 ; dedicated zero register
+   lea     uqcq, [uqcq+sizeq*2]
+diff --git a/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm b/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
+index 7c4cb5ead..2d3c38e87 100644
+--- a/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
++++ b/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
+@@ -88,7 +88,10 @@ SECTION .text
+ 
+ %macro INC_SRC_BY_SRC_2STRIDE  0
+ %if ARCH_X86=1 && CONFIG_PIC=1
+-  lea                srcq, [srcq + src_stridemp*4]
++  add                srcp, src_stridemx
++  add                srcp, src_stridemx
++  add                srcp, src_stridemx
++  add                srcp, src_stridemx
+ %else
+   lea                srcq, [srcq + src_strideq*4]
+ %endif
+diff --git a/vpx_dsp/x86/variance_impl_mmx.asm b/vpx_dsp/x86/variance_impl_mmx.asm
+index b8ba79b65..1e9ddc873 100644
+--- a/vpx_dsp/x86/variance_impl_mmx.asm
++++ b/vpx_dsp/x86/variance_impl_mmx.asm
+@@ -535,8 +535,8 @@ sym(vpx_filter_block2d_bil4x4_var_mmx):
+         psrlq           mm4,            32                  ;
+         paddd           mm4,            mm7                 ;
+ 
+-        mov             rdi,            arg(6) ;sum
+-        mov             rsi,            arg(7) ;sumsquared
++        mov             rdip,           arg(6) ;sum
++        mov             rsip,           arg(7) ;sumsquared
+ 
+         movd            dword ptr [rdi],          mm2                 ;
+         movd            dword ptr [rsi],          mm4                 ;
+@@ -577,7 +577,7 @@ sym(vpx_filter_block2d_bil_var_mmx):
+         pxor            mm7,            mm7                 ;
+         mov             rax,            arg(5) ;HFilter             ;
+ 
+-        mov             rdx,            arg(6) ;VFilter             ;
++        mov             rdxp,           arg(6) ;VFilter             ;
+         mov             rsi,            arg(0) ;ref_ptr              ;
+ 
+         mov             rdi,            arg(2) ;src_ptr              ;
+@@ -722,8 +722,8 @@ sym(vpx_filter_block2d_bil_var_mmx):
+         psrlq           mm4,            32                  ;
+         paddd           mm4,            mm7                 ;
+ 
+-        mov             rdi,            arg(7) ;sum
+-        mov             rsi,            arg(8) ;sumsquared
++        mov             rdip,           arg(7) ;sum
++        mov             rsip,           arg(8) ;sumsquared
+ 
+         movd            dword ptr [rdi],          mm2                 ;
+         movd            dword ptr [rsi],          mm4                 ;
+-- 
+2.16.4
+

@@ -1,0 +1,297 @@
+From fcb802bb81d2450a16c49756693fafd12cdaa3cc Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Mon, 10 Sep 2018 00:53:32 +0200
+Subject: [PATCH 13/16] rebase v1.7.0_x32->v1.6.1_x32 extra: x32 support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I20235fabd1aaa9594b1c81b5e57dc707d5fbe8e2
+---
+ vp8/encoder/x86/quantize_mmx.asm                   | 10 +++---
+ vp9/encoder/x86/vp9_highbd_error_avx.asm           |  3 +-
+ vp9/encoder/x86/vp9_highbd_error_sse2.asm          |  1 +
+ vp9/encoder/x86/vp9_temporal_filter_apply_sse2.asm |  4 +--
+ vpx_dsp/x86/inv_txfm_ssse3_x86_64.asm              |  2 ++
+ vpx_dsp/x86/quantize_avx_x86_64.asm                | 42 +++++++++++-----------
+ vpx_dsp/x86/quantize_ssse3_x86_64.asm              | 30 ++++++++--------
+ 7 files changed, 48 insertions(+), 44 deletions(-)
+
+diff --git a/vp8/encoder/x86/quantize_mmx.asm b/vp8/encoder/x86/quantize_mmx.asm
+index 2864ce16d..a6c719cdc 100644
+--- a/vp8/encoder/x86/quantize_mmx.asm
++++ b/vp8/encoder/x86/quantize_mmx.asm
+@@ -43,7 +43,7 @@ sym(vp8_fast_quantize_b_impl_mmx):
+         pandn           mm1,        mm2
+         movq            mm3,        mm1
+ 
+-        mov             rdx,        arg(6) ;quant_ptr
++        mov             rdxp,       arg(6) ;quant_ptr
+         movq            mm1,        [rdx]
+ 
+         mov             rcx,        arg(5) ;round_ptr
+@@ -64,7 +64,7 @@ sym(vp8_fast_quantize_b_impl_mmx):
+         movq            mm2,        [rax]
+ 
+         pmullw          mm3,        mm2
+-        mov             rax,        arg(7) ;dqcoeff_ptr
++        mov             raxp,       arg(7) ;dqcoeff_ptr
+ 
+         movq            [rax],      mm3
+ 
+@@ -104,7 +104,7 @@ sym(vp8_fast_quantize_b_impl_mmx):
+         movq            mm6,        [rax+8]
+ 
+         pmullw          mm7,        mm6
+-        mov             rax,        arg(7) ;dqcoeff_ptr
++        mov             raxp,       arg(7) ;dqcoeff_ptr
+ 
+         movq            [rax+8],    mm7
+ 
+@@ -145,7 +145,7 @@ sym(vp8_fast_quantize_b_impl_mmx):
+         movq            mm6,        [rax+16]
+ 
+         pmullw          mm7,        mm6
+-        mov             rax,        arg(7) ;dqcoeff_ptr
++        mov             raxp,       arg(7) ;dqcoeff_ptr
+ 
+         movq            [rax+16],   mm7
+ 
+@@ -186,7 +186,7 @@ sym(vp8_fast_quantize_b_impl_mmx):
+         movq            mm6,        [rax+24]
+ 
+         pmullw          mm7,        mm6
+-        mov             rax,        arg(7) ;dqcoeff_ptr
++        mov             raxp,       arg(7) ;dqcoeff_ptr
+ 
+         movq            [rax+24],   mm7
+ 
+diff --git a/vp9/encoder/x86/vp9_highbd_error_avx.asm b/vp9/encoder/x86/vp9_highbd_error_avx.asm
+index e476323e1..e6eb66570 100644
+--- a/vp9/encoder/x86/vp9_highbd_error_avx.asm
++++ b/vp9/encoder/x86/vp9_highbd_error_avx.asm
+@@ -27,7 +27,7 @@ cglobal highbd_block_error_8bit, 4, 5, 8, uqc, dqc, size, ssz
+   ; If only one iteration is required, then handle this as a special case.
+   ; It is the most frequent case, so we can have a significant gain here
+   ; by not setting up a loop and accumulators.
+-  cmp    sizeq, 16
++  cmp    sizep, 16
+   jne   .generic
+ 
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+@@ -97,6 +97,7 @@ cglobal highbd_block_error_8bit, 4, 5, 8, uqc, dqc, size, ssz
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   ALIGN 16
+ .generic:
++  movsxdifnidn sizeq, sizep
+   pxor      xm4, xm4                ; sse accumulator
+   pxor      xm5, xm5                ; overflow detection register for xm4
+   pxor      xm6, xm6                ; ssz accumulator
+diff --git a/vp9/encoder/x86/vp9_highbd_error_sse2.asm b/vp9/encoder/x86/vp9_highbd_error_sse2.asm
+index f3b8f0194..e60e4047d 100644
+--- a/vp9/encoder/x86/vp9_highbd_error_sse2.asm
++++ b/vp9/encoder/x86/vp9_highbd_error_sse2.asm
+@@ -22,6 +22,7 @@ ALIGN 16
+ 
+ INIT_XMM sse2
+ cglobal highbd_block_error_8bit, 3, 3, 8, uqc, dqc, size, ssz
++  movsxdifnidn sizeq, sizep
+   pxor      m4, m4                 ; sse accumulator
+   pxor      m6, m6                 ; ssz accumulator
+   pxor      m5, m5                 ; dedicated zero register
+diff --git a/vp9/encoder/x86/vp9_temporal_filter_apply_sse2.asm b/vp9/encoder/x86/vp9_temporal_filter_apply_sse2.asm
+index 21aaa9383..b13c06f16 100644
+--- a/vp9/encoder/x86/vp9_temporal_filter_apply_sse2.asm
++++ b/vp9/encoder/x86/vp9_temporal_filter_apply_sse2.asm
+@@ -61,8 +61,8 @@ sym(vp9_temporal_filter_apply_sse2):
+ 
+         mov         rsi,            arg(0) ; src/frame1
+         mov         rdx,            arg(2) ; predictor frame
+-        mov         rdi,            arg(7) ; accumulator
+-        mov         rax,            arg(8) ; count
++        mov         rdip,           arg(7) ; accumulator
++        mov         raxp,           arg(8) ; count
+ 
+         ; dup the filter weight and store for later
+         movd        xmm0,           arg(6) ; filter_weight
+diff --git a/vpx_dsp/x86/inv_txfm_ssse3_x86_64.asm b/vpx_dsp/x86/inv_txfm_ssse3_x86_64.asm
+index 68e7fa40c..4a7d4a399 100644
+--- a/vpx_dsp/x86/inv_txfm_ssse3_x86_64.asm
++++ b/vpx_dsp/x86/inv_txfm_ssse3_x86_64.asm
+@@ -154,6 +154,7 @@ SECTION .text
+ INIT_XMM ssse3
+ ; full inverse 8x8 2D-DCT transform
+ cglobal idct8x8_64_add, 3, 5, 13, input, output, stride
++  movsxdifnidn strideq, stridep
+   mova     m8, [pd_8192]
+   mova    m11, [pw_16]
+   mova    m12, [pw_11585x2]
+@@ -187,6 +188,7 @@ cglobal idct8x8_64_add, 3, 5, 13, input, output, stride
+ 
+ ; inverse 8x8 2D-DCT transform with only first 10 coeffs non-zero
+ cglobal idct8x8_12_add, 3, 5, 13, input, output, stride
++  movsxdifnidn strideq, stridep
+   mova       m8, [pd_8192]
+   mova      m11, [pw_16]
+   mova      m12, [pw_11585x2]
+diff --git a/vpx_dsp/x86/quantize_avx_x86_64.asm b/vpx_dsp/x86/quantize_avx_x86_64.asm
+index 01c41291b..7ed26732c 100644
+--- a/vpx_dsp/x86/quantize_avx_x86_64.asm
++++ b/vpx_dsp/x86/quantize_avx_x86_64.asm
+@@ -27,7 +27,7 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ 
+   ; Special case for ncoeff == 16, as it is frequent and we can save on
+   ; not setting up a loop.
+-  cmp                       ncoeffmp, 16
++  cmp                       ncoeffmx, 16
+   jne .generic
+ 
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+@@ -36,8 +36,8 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ 
+ .single:
+ 
+-  movifnidn                   coeffq, coeffmp
+-  movifnidn                    zbinq, zbinmp
++  movifnidn                   coeffp, coeffmx
++  movifnidn                    zbinp, zbinmx
+   mova                            m0, [zbinq]              ; m0 = zbin
+ 
+   ; Get DC and first 15 AC coeffs - in this special case, that is all.
+@@ -52,9 +52,9 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+   mova                           m10, [coeffq+16]          ; m10 = c[i]
+ %endif
+ 
+-  mov                             r0, eobmp                ; Output pointer
+-  mov                             r1, qcoeffmp             ; Output pointer
+-  mov                             r2, dqcoeffmp            ; Output pointer
++  mov                            r0p, eobmx                ; Output pointer
++  mov                            r1p, qcoeffmx             ; Output pointer
++  mov                            r2p, dqcoeffmx            ; Output pointer
+ 
+   pxor                            m5, m5                   ; m5 = dedicated zero
+ 
+@@ -90,16 +90,16 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ .single_nonzero:
+ 
+   ; Actual quantization of size 16 block - setup pointers, rounders, etc.
+-  movifnidn                       r4, roundmp
+-  movifnidn                       r5, quantmp
+-  mov                             r3, dequantmp
+-  mov                             r6, shiftmp
++  movifnidn                      r4p, roundmx
++  movifnidn                      r5p, quantmx
++  mov                            r3p, dequantmx
++  mov                            r6p, shiftmx
+   mova                            m1, [r4]              ; m1 = round
+   mova                            m2, [r5]              ; m2 = quant
+   mova                            m3, [r3]              ; m3 = dequant
+   mova                            m4, [r6]              ; m4 = shift
+ 
+-  mov                             r3, iscanmp
++  mov                            r3p, iscanmx
+ 
+   DEFINE_ARGS eob, qcoeff, dqcoeff, iscan
+ 
+@@ -195,12 +195,12 @@ DEFINE_ARGS coeff, ncoeff, skip, zbin, round, quant, shift, \
+             qcoeff, dqcoeff, dequant, eob, scan, iscan
+ 
+   ; Actual quantization loop - setup pointers, rounders, etc.
+-  movifnidn                   coeffq, coeffmp
+-  movifnidn                  ncoeffq, ncoeffmp
+-  mov                             r2, dequantmp
+-  movifnidn                    zbinq, zbinmp
+-  movifnidn                   roundq, roundmp
+-  movifnidn                   quantq, quantmp
++  movifnidn                   coeffp, coeffmx
++  movsxdifnidn               ncoeffq, ncoeffmx
++  mov                            r2p, dequantmx
++  movifnidn                    zbinp, zbinmx
++  movifnidn                   roundp, roundmx
++  movifnidn                   quantp, quantmx
+   mova                            m0, [zbinq]              ; m0 = zbin
+   mova                            m1, [roundq]             ; m1 = round
+   mova                            m2, [quantq]             ; m2 = quant
+@@ -214,11 +214,11 @@ DEFINE_ARGS coeff, ncoeff, skip, zbin, round, quant, shift, \
+ %endif
+   paddw                           m0, m4                   ; m0 = m0 + 1
+ 
+-  mov                             r2, shiftmp
+-  mov                             r3, qcoeffmp
++  mov                            r2p, shiftmx
++  mov                            r3p, qcoeffmx
+   mova                            m4, [r2]                 ; m4 = shift
+-  mov                             r4, dqcoeffmp
+-  mov                             r5, iscanmp
++  mov                            r4p, dqcoeffmx
++  mov                            r5p, iscanmx
+ %ifidn %1, b_32x32
+   psllw                           m4, 1
+ %endif
+diff --git a/vpx_dsp/x86/quantize_ssse3_x86_64.asm b/vpx_dsp/x86/quantize_ssse3_x86_64.asm
+index ca2153917..554841631 100644
+--- a/vpx_dsp/x86/quantize_ssse3_x86_64.asm
++++ b/vpx_dsp/x86/quantize_ssse3_x86_64.asm
+@@ -24,12 +24,12 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+   jne .blank
+ 
+   ; actual quantize loop - setup pointers, rounders, etc.
+-  movifnidn                   coeffq, coeffmp
+-  movifnidn                  ncoeffq, ncoeffmp
+-  mov                             r2, dequantmp
+-  movifnidn                    zbinq, zbinmp
+-  movifnidn                   roundq, roundmp
+-  movifnidn                   quantq, quantmp
++  movifnidn                   coeffp, coeffmx
++  movsxdifnidn               ncoeffq, ncoeffmx
++  mov                            r2p, dequantmx
++  movifnidn                    zbinp, zbinmx
++  movifnidn                   roundp, roundmx
++  movifnidn                   quantp, quantmx
+   mova                            m0, [zbinq]              ; m0 = zbin
+   mova                            m1, [roundq]             ; m1 = round
+   mova                            m2, [quantq]             ; m2 = quant
+@@ -43,11 +43,11 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ %endif
+   mova                            m3, [r2q]                ; m3 = dequant
+   psubw                           m0, [pw_1]
+-  mov                             r2, shiftmp
+-  mov                             r3, qcoeffmp
++  mov                            r2p, shiftmx
++  mov                            r3p, qcoeffmx
+   mova                            m4, [r2]                 ; m4 = shift
+-  mov                             r4, dqcoeffmp
+-  mov                             r5, iscanmp
++  mov                            r4p, dqcoeffmx
++  mov                            r5p, iscanmx
+ %ifidn %1, b_32x32
+   psllw                           m4, 1
+ %endif
+@@ -292,7 +292,7 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ 
+ .accumulate_eob:
+   ; horizontally accumulate/max eobs and write into [eob] memory pointer
+-  mov                             r2, eobmp
++  mov                            r2p, eobmx
+   pshufd                          m7, m8, 0xe
+   pmaxsw                          m8, m7
+   pshuflw                         m7, m8, 0xe
+@@ -305,10 +305,10 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ 
+   ; skip-block, i.e. just write all zeroes
+ .blank:
+-  mov                             r0, dqcoeffmp
+-  movifnidn                  ncoeffq, ncoeffmp
+-  mov                             r2, qcoeffmp
+-  mov                             r3, eobmp
++  mov                            r0p, dqcoeffmx
++  movsxdifnidn               ncoeffq, ncoeffmx
++  mov                            r2p, qcoeffmx
++  mov                            r3p, eobmx
+   DEFINE_ARGS dqcoeff, ncoeff, qcoeff, eob
+ %if CONFIG_VP9_HIGHBITDEPTH
+   lea                       dqcoeffq, [dqcoeffq+ncoeffq*4]
+-- 
+2.16.4
+

@@ -1,0 +1,30 @@
+From e7a17eaf35d7c76d52204a708aa5c024752e21d5 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Mon, 10 Sep 2018 03:07:53 +0200
+Subject: [PATCH 15/15] valgrind: fix uninitialized memory
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I8e83bf8ceefaeb0447c73dcd99acb11d1fd65e2d
+---
+ vpx_dsp/fastssim.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/vpx_dsp/fastssim.c b/vpx_dsp/fastssim.c
+index d4b720191..d71948556 100644
+--- a/vpx_dsp/fastssim.c
++++ b/vpx_dsp/fastssim.c
+@@ -70,7 +70,7 @@ static void fs_ctx_init(fs_ctx *_ctx, int _w, int _h, int _nlevels) {
+     lw = (lw + 1) >> 1;
+     lh = (lh + 1) >> 1;
+   }
+-  data = (unsigned char *)malloc(data_size);
++  data = (unsigned char *)calloc(1, data_size);
+   _ctx->level = (fs_level *)data;
+   _ctx->nlevels = _nlevels;
+   data += _nlevels * sizeof(*_ctx->level);
+-- 
+2.16.4
+

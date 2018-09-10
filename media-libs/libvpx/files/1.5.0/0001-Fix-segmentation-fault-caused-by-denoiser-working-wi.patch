@@ -1,0 +1,32 @@
+From a0afd406f665466b493b9ebf40c0be2005d0f1a9 Mon Sep 17 00:00:00 2001
+From: Jerome Jiang <jianj@google.com>
+Date: Fri, 17 Feb 2017 17:56:08 -0800
+Subject: [PATCH 01/16] Fix segmentation fault caused by denoiser working with
+ spatial SVC.
+
+Re-enable the affected test.
+BUG=webm:1374
+
+Change-Id: I98cd49403927123546d1d0056660b98c9cb8babb
+---
+ vp8/common/x86/postproc_sse2.asm | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/vp8/common/x86/postproc_sse2.asm b/vp8/common/x86/postproc_sse2.asm
+index fed4ee5cc..398884d78 100644
+--- a/vp8/common/x86/postproc_sse2.asm
++++ b/vp8/common/x86/postproc_sse2.asm
+@@ -78,8 +78,8 @@
+ %endmacro
+ 
+ %macro UPDATE_FLIMIT 0
+-        movdqa      xmm2,       XMMWORD PTR [rbx]
+-        movdqa      [rsp],      xmm2
++        movdqu      xmm2,       XMMWORD PTR [rbx]
++        movdqu      [rsp],      xmm2
+         add         rbx,        16
+ %endmacro
+ 
+-- 
+2.16.4
+

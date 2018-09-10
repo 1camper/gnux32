@@ -1,0 +1,44 @@
+From a1d256bca8794894ac34f49e20b146039de7e197 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 9 Sep 2018 22:48:51 +0200
+Subject: [PATCH 06/16] valgrind: fix using unitialized memory, memleak
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I1c4026e4b818eb55960216026044cf1f035d3af4
+---
+ vp9/encoder/vp9_encoder.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/vp9/encoder/vp9_encoder.c b/vp9/encoder/vp9_encoder.c
+index 4369a300b..3085355ef 100644
+--- a/vp9/encoder/vp9_encoder.c
++++ b/vp9/encoder/vp9_encoder.c
+@@ -1847,8 +1847,8 @@ VP9_COMP *vp9_create_compressor(VP9EncoderConfig *oxcf,
+ 
+   if (cpi->b_calculate_consistency) {
+     CHECK_MEM_ERROR(cm, cpi->ssim_vars,
+-                    vpx_malloc(sizeof(*cpi->ssim_vars) * 4 *
+-                               cpi->common.mi_rows * cpi->common.mi_cols));
++                    vpx_calloc(cpi->common.mi_rows * cpi->common.mi_cols,
++                               4 * sizeof(*cpi->ssim_vars)));
+     cpi->worst_consistency = 100.0;
+   }
+ 
+@@ -2198,6 +2198,11 @@ void vp9_remove_compressor(VP9_COMP *cpi) {
+   }
+ #endif
+ 
++#if CONFIG_INTERNAL_STATS
++  if (cpi->ssim_vars)
++    vpx_free(cpi->ssim_vars);
++#endif
++
+   vp9_remove_common(cm);
+   vp9_free_ref_frame_buffers(cm->buffer_pool);
+ #if CONFIG_VP9_POSTPROC
+-- 
+2.16.4
+
