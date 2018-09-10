@@ -8,10 +8,6 @@ This overlay contains ebuilds with patches that fix x32 problems.
 
 Currently goal is trying to get popular packages and necessary developer tools for a working desktop.
 
-The following part stolen from muslx32 overlay readme:
-
-<<<<<<<<
-
 ### What is x32?
 
 x32 ABI is a 32-bit (4-bytes) per integer, long, pointer using all of the x86_64 general purpose registers identified as (rax,rbx,rcx,r11-r15,rsi,rdi) and using sse registers.  Long-long integers are 8 bytes.  C/C++ programs will use __ILP32__ preprocessor checks to distinguish between 32/64 bit systems.  The build system may also compare sizeof(void*) to see if it has 4 bytes for 32-bit for 8 bytes and 64-bit for LP64 (longs are 8 bytes as well as pointers) and __x86_64__ defined.  
@@ -23,8 +19,6 @@ x32 is better than x86 because the compiler can utilize the x86_64 calling conve
 
 #### x32 ABI vs x86_64 ABI
 x32 is better than x86_64 because of reduced pointer size and reduced virtual space.  Reduced virtual space is better safeguard against memory hogs and better memory/cache locality to reduce cache/page miss in theory.
-
->>>>>>>>
 
 ### Disadvantages
 
