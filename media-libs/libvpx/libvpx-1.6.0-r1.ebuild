@@ -52,6 +52,8 @@ PATCHES=(
 	epatch "${FILESDIR}/${PV}/0014-rebase-v1.7.0_x32-v1.6.1_x32-extra-x32-support.patch"
 	epatch "${FILESDIR}/${PV}/0015-rebase-v1.6.1_x32-v1.6.0_x32-extra.patch"
 	epatch "${FILESDIR}/${PV}/0016-valgrind-fix-uninitialized-memory.patch"
+	epatch "${FILESDIR}/${PV}/0017-quantize_ssse3_x86_64.asm-fix-data-heap-corruption.patch"
+	epatch "${FILESDIR}/${PV}/0018-vp9_error_sse2.asm-fix-typo.patch"
 )
 
 src_configure() {
@@ -98,6 +100,7 @@ multilib_src_configure() {
 		--enable-vp9 \
 		--enable-shared \
 		--extra-cflags="${CFLAGS}" \
+		--disable-optimizations \
 		$(use_enable cpu_flags_x86_avx avx) \
 		$(use_enable cpu_flags_x86_avx2 avx2) \
 		$(use_enable cpu_flags_x86_mmx mmx) \

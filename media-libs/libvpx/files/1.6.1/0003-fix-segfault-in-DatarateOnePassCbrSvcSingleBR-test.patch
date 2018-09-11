@@ -1,7 +1,7 @@
 From 33d12604bc6bd3d0e5864dc2a270aede9e20dedf Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sat, 8 Sep 2018 20:38:40 +0200
-Subject: [PATCH 03/15] fix segfault in DatarateOnePassCbrSvcSingleBR test
+Subject: [PATCH 03/17] fix segfault in DatarateOnePassCbrSvcSingleBR test
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

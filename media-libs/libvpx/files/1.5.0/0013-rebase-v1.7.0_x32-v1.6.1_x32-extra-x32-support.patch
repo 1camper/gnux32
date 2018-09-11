@@ -1,7 +1,7 @@
 From fcb802bb81d2450a16c49756693fafd12cdaa3cc Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Mon, 10 Sep 2018 00:53:32 +0200
-Subject: [PATCH 13/16] rebase v1.7.0_x32->v1.6.1_x32 extra: x32 support
+Subject: [PATCH 13/17] rebase v1.7.0_x32->v1.6.1_x32 extra: x32 support
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

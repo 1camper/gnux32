@@ -1,7 +1,7 @@
 From a1d256bca8794894ac34f49e20b146039de7e197 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 9 Sep 2018 22:48:51 +0200
-Subject: [PATCH 06/16] valgrind: fix using unitialized memory, memleak
+Subject: [PATCH 06/18] valgrind: fix using unitialized memory, memleak
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

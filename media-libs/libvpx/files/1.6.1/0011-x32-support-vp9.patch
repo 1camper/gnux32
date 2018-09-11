@@ -1,7 +1,7 @@
 From bd4b2c3d7ac5a1fffdac9898f373804565baddfc Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 9 Sep 2018 22:52:35 +0200
-Subject: [PATCH 11/15] x32 support: vp9
+Subject: [PATCH 11/17] x32 support: vp9
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

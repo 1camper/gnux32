@@ -1,7 +1,7 @@
 From 9710ce2e2a4a95deb8180cb6d0450fbae51d6b12 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Mon, 10 Sep 2018 03:06:40 +0200
-Subject: [PATCH 15/16] rebase v1.6.1_x32->v1.6.0_x32 extra
+Subject: [PATCH 15/18] rebase v1.6.1_x32->v1.6.0_x32 extra
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

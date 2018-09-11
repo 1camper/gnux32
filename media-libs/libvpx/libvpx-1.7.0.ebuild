@@ -84,6 +84,7 @@ multilib_src_configure() {
 		--enable-vp9
 		--enable-shared
 		--extra-cflags="${CFLAGS}"
+		--disable-optimizations \
 		$(use_enable cpu_flags_x86_avx avx)
 		$(use_enable cpu_flags_x86_avx2 avx2)
 		$(use_enable cpu_flags_x86_mmx mmx)

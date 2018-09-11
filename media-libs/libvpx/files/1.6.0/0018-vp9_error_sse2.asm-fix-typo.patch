@@ -1,0 +1,39 @@
+From 587d22280790aaa440fbf662540a3980cdbd933a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Tue, 11 Sep 2018 16:07:27 +0200
+Subject: [PATCH 18/18] vp9_error_sse2.asm: fix typo
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: Iefe0b55284c65e77d7ed91c9d20619536cd7965f
+---
+ vp9/encoder/x86/vp9_error_sse2.asm | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/vp9/encoder/x86/vp9_error_sse2.asm b/vp9/encoder/x86/vp9_error_sse2.asm
+index a97afb214..55ee22322 100644
+--- a/vp9/encoder/x86/vp9_error_sse2.asm
++++ b/vp9/encoder/x86/vp9_error_sse2.asm
+@@ -19,7 +19,7 @@ SECTION .text
+ 
+ INIT_XMM sse2
+ cglobal block_error, 3, 3, 8, uqc, dqc, size, ssz
+-  movsxifnidn sizeq, sizep
++  movsxdifnidn sizeq, sizep
+   pxor      m4, m4                 ; sse accumulator
+   pxor      m6, m6                 ; ssz accumulator
+   pxor      m5, m5                 ; dedicated zero register
+@@ -82,7 +82,7 @@ cglobal block_error, 3, 3, 8, uqc, dqc, size, ssz
+ 
+ INIT_XMM sse2
+ cglobal block_error_fp, 3, 3, 6, uqc, dqc, size
+-  movsxifnidn sizeq, sizep
++  movsxdifnidn sizeq, sizep
+   pxor      m4, m4                 ; sse accumulator
+   pxor      m5, m5                 ; dedicated zero register
+   lea     uqcq, [uqcq+sizeq*2]
+-- 
+2.16.4
+

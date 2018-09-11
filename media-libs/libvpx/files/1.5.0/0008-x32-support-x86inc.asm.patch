@@ -1,7 +1,7 @@
 From 9e22974a2c90b5530019f4396f5b9db8482c06d8 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 9 Sep 2018 22:51:40 +0200
-Subject: [PATCH 08/16] x32 support: x86inc.asm
+Subject: [PATCH 08/17] x32 support: x86inc.asm
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

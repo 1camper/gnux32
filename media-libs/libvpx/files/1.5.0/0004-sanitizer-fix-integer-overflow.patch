@@ -1,7 +1,7 @@
 From 6e2bdee4e44c17dc0b97be838c15576813b98fce Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 9 Sep 2018 22:47:09 +0200
-Subject: [PATCH 04/16] sanitizer: fix integer overflow
+Subject: [PATCH 04/17] sanitizer: fix integer overflow
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

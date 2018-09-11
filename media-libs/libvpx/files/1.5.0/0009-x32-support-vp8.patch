@@ -1,7 +1,7 @@
 From d6d492e51e00d331c24582f320d3e158a877b462 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 9 Sep 2018 22:52:26 +0200
-Subject: [PATCH 09/16] x32 support: vp8
+Subject: [PATCH 09/17] x32 support: vp8
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

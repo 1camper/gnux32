@@ -38,7 +38,6 @@ Some patches/ebuilds from mulsx32 overlay (https://github.com/orsonteodoro/muslx
 package | notes
 --- | ---
 app-office/libreoffice | fails tests.
-media-libs/libvpx | 1.5.0 reports heap corruption after certain tests, heisenbug: disappears with -fsanitizer=address; working theory is that it's a out of bounds access that just happens to hit heap management structures instead of causing random data corruption (which can sometimes be seen on x86); source probably not x32-specific.
 
 ### currently working on:
 ffmpeg + dependencies

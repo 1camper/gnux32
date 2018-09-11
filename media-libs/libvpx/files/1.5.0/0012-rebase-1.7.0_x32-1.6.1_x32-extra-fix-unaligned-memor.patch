@@ -1,7 +1,7 @@
 From ce482d8037fed096b35e01272a6c1520cba1dcb9 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Mon, 10 Sep 2018 00:49:50 +0200
-Subject: [PATCH 12/16] rebase 1.7.0_x32->1.6.1_x32 extra: fix unaligned memory
+Subject: [PATCH 12/17] rebase 1.7.0_x32->1.6.1_x32 extra: fix unaligned memory
  access
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

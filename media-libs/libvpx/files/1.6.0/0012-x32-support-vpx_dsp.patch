@@ -1,7 +1,7 @@
 From eb541a14d8a5aca3f69d42ddb9dd9b477cc73ad7 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 9 Sep 2018 22:53:31 +0200
-Subject: [PATCH 12/16] x32 support: vpx_dsp
+Subject: [PATCH 12/18] x32 support: vpx_dsp
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

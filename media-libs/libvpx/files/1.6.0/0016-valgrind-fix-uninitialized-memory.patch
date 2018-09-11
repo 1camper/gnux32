@@ -1,7 +1,7 @@
 From 80f0faa2a1287755163186cc4508dfa768e10b5e Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Mon, 10 Sep 2018 03:07:53 +0200
-Subject: [PATCH 16/16] valgrind: fix uninitialized memory
+Subject: [PATCH 16/18] valgrind: fix uninitialized memory
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
