@@ -1,3 +1,16 @@
+Index: lib/Target/X86/X86FastISel.cpp
+===================================================================
+--- a/lib/Target/X86/X86FastISel.cpp
++++ b/lib/Target/X86/X86FastISel.cpp
+@@ -1272,7 +1272,7 @@
+     unsigned Reg = X86MFInfo->getSRetReturnReg();
+     assert(Reg &&
+            "SRetReturnReg should have been set in LowerFormalArguments()!");
+-    unsigned RetReg = Subtarget->is64Bit() ? X86::RAX : X86::EAX;
++    unsigned RetReg = Subtarget->isTarget64BitLP64() ? X86::RAX : X86::EAX;
+     BuildMI(*FuncInfo.MBB, FuncInfo.InsertPt, DbgLoc,
+             TII.get(TargetOpcode::COPY), RetReg).addReg(Reg);
+     RetRegs.push_back(RetReg);
 Index: lib/Target/X86/X86SelectionDAGInfo.cpp
 ===================================================================
 --- a/lib/Target/X86/X86SelectionDAGInfo.cpp

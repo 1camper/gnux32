@@ -88,7 +88,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/6.0.1/0002-llvm-mc-Produce-R_X86_64_PLT32-for-call-jmp-foo.patch
 
 	# Fix https://bugs.llvm.org/show_bug.cgi?id=38865
-	eapply "${FILESDIR}"/6.0.1/llvm-x32-D51893.patch
+	eapply "${FILESDIR}"/6.0.1/llvm-x32-PR38865.patch
 
 	# disable use of SDK on OSX, bug #568758
 	sed -i -e 's/xcrun/false/' utils/lit/lit/util.py || die
