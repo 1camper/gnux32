@@ -6,7 +6,7 @@ EAPI=6
 PYTHON_COMPAT=( python2_7 )
 
 GENTOO_DEPEND_ON_PERL="no"
-inherit eutils perl-module python-any-r1 cmake-multilib
+inherit perl-module python-any-r1 cmake-multilib
 
 DESCRIPTION="Library providing rendering capabilities for complex non-Roman writing systems"
 HOMEPAGE="http://graphite.sil.org/"
@@ -14,7 +14,7 @@ SRC_URI="mirror://sourceforge/silgraphite/${PN}/${P}.tgz"
 
 LICENSE="LGPL-2.1"
 SLOT="0"
-KEYWORDS="alpha amd64 arm arm64 hppa ia64 ~mips ppc ppc64 s390 ~sh sparc x86 ~amd64-fbsd ~x86-fbsd ~amd64-linux ~x86-linux ~ppc-macos ~x64-macos ~x86-macos ~x64-solaris"
+KEYWORDS="~alpha ~amd64 ~arm ~arm64 ~hppa ~ia64 ~mips ~ppc ~ppc64 ~s390 ~sh ~sparc ~x86 ~amd64-fbsd ~x86-fbsd ~amd64-linux ~x86-linux ~ppc-macos ~x64-macos ~x86-macos ~x64-solaris"
 IUSE="perl test"
 
 RDEPEND="
@@ -38,7 +38,7 @@ DEPEND="${RDEPEND}
 
 PATCHES=(
 	"${FILESDIR}/${PN}-1.3.5-includes-libs-perl.patch"
-	"${FILESDIR}/${PN}-1.3.10-x32-bit_set_count.patch"
+	"${FILESDIR}/${PN}-1.3.12-x32.patch"
 )
 
 pkg_setup() {
@@ -63,7 +63,8 @@ src_prepare() {
 
 multilib_src_configure() {
 	local mycmakeargs=(
-		"-DVM_MACHINE_TYPE=direct"
+		# Renamed VM_MACHINE_TYPE to GRAPHITE2_VM_TYPE
+		"-DGRAPHITE2_VM_TYPE=direct"
 		# https://sourceforge.net/p/silgraphite/bugs/49/
 		$([[ ${CHOST} == powerpc*-apple* ]] && \
 			echo "-DGRAPHITE2_NSEGCACHE:BOOL=ON")
@@ -115,5 +116,5 @@ src_install() {
 		perl_delete_localpod
 	fi
 
-	prune_libtool_files --all
+	find "${ED}" \( -name '*.a' -o -name '*.la' \) -delete || die
 }

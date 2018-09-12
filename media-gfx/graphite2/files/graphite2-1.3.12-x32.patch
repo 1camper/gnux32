@@ -1,0 +1,22 @@
+commit 6df691536f9626e5725c84b488b4653abcf232ef
+Author: mirabilos <t.glaser@tarent.de>
+Date:   Wed Aug 1 18:06:06 2018 +0200
+
+    Fix x32 being misdetected as amd64 in tests
+    
+    x32 defines __x86_64__ and __ILP32__ and has 32-bit “long”s
+    so it doesn’t work with the UL suffix in the test preparation.
+
+diff --git a/tests/bittwiddling/bits.cpp b/tests/bittwiddling/bits.cpp
+index 5a84305..02a74e8 100644
+--- a/tests/bittwiddling/bits.cpp
++++ b/tests/bittwiddling/bits.cpp
+@@ -38,7 +38,7 @@ sparse classe is working correctly.
+ 
+ using namespace graphite2;
+ 
+-#if defined(__x86_64__) || defined(_WIN64)
++#if (defined(__x86_64__) && !defined(__ILP32__)) || defined(_WIN64)
+ 	#define HAS_64BIT
+ #endif
+ 
