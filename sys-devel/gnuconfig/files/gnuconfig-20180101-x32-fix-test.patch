@@ -1,0 +1,41 @@
+--- a/work/testsuite/config-guess.data
++++ b/work/testsuite/config-guess.data
+@@ -93,5 +93,6 @@
+ x86_64		 1.5.18(0.132/4/2)	 CYGWIN_NT-5.2		 ignored	 ignored	 x86_64-unknown-cygwin
+ x86_64		 2.0.0(0.271/5/3)	 MSYS_NT-6.1		 ignored	 ignored	 x86_64-pc-msys
+ x86_64		 2.6.32			 Linux			 ignored	 ignored	 x86_64-pc-linux-gnu
++x86_64		 3.4.0			 Linux			 ignored	 ignored	 x86_64-pc-linux-gnux32
+ x86_64		 2.6.32			 VMkernel		 ignored	 ignored	 x86_64-unknown-esx
+ xtensa		 2.6.15			 Linux			 ignored	 ignored	 xtensa-unknown-linux-gnu
+--- a/work/testsuite/config-guess.sh
++++ b/work/testsuite/config-guess.sh
+@@ -13,6 +13,7 @@
+ run_config_guess()
+ {
+     rc=0
++    tr=""
+     while read machine release system version processor triplet ; do
+ 	sed \
+ 	    -e "s,@MACHINE@,$machine," \
+@@ -35,13 +36,19 @@
+ 	    rc=1
+ 	    continue
+ 	fi
+-	if test "$output" != "$triplet" ; then
+-	    echo "FAIL: $output (expected $triplet)"
++	if test "$output" != "$triplet" && test rc == 0 ; then
++	    tr=$triplet
+ 	    rc=1
+ 	    continue
+ 	fi
+ 	$verbose && echo "PASS: $triplet"
++	rc=2
+     done
++    if test rc == 1 ; then
++	echo "FAIL: $output (expected $tr)"
++    else
++	rc=0
++    fi
+     return $rc
+ }
+ 
