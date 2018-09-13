@@ -83,8 +83,9 @@ src_prepare() {
 	# Fix appending -Wl,-rpath-link on non-Linux (-> FreeBSD).
 	eapply "${FILESDIR}"/6.0.1/0001-cmake-Append-Wl-rpath-link-conditionally-to-GNULD.patch
 
-	# Fix https://bugs.llvm.org/show_bug.cgi?id=38865
-	eapply "${FILESDIR}"/6.0.1/llvm-x32-PR38865.patch
+	# x32
+	eapply -p2 "${FILESDIR}"/6.0.1/llvm-x32-PR38865-D51893.patch
+	eapply -p2 "${FILESDIR}"/6.0.1/llvm-x32-PR38865-D51940.patch
 
 	# disable use of SDK on OSX, bug #568758
 	sed -i -e 's/xcrun/false/' utils/lit/lit/util.py || die

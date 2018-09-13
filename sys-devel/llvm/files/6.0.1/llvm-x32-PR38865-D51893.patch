@@ -1,0 +1,162 @@
+commit 8236eb023b4e7a026d5526b6a7f13f03d988677d
+Author: Craig Topper <craig.topper@intel.com>
+Date:   Wed Sep 12 01:57:22 2018 +0000
+
+    [X86] Teach X86SelectionDAGInfo::EmitTargetCodeForMemcpy about GNUX32
+    
+    Summary:
+    In GNUX23, is64BitMode returns true, but pointers are 32-bits. So we shouldn't copy pointer values into RSI/RDI since the widths don't match.
+    
+    Fixes PR38865 despite what the title says. I think the llvm_unreachable in the copyPhysReg code tricked the optimizer and made the fatal error trigger.
+    
+    Reviewers: rnk, efriedma, MatzeB, echristo
+    
+    Reviewed By: efriedma
+    
+    Subscribers: llvm-commits
+    
+    Differential Revision: https://reviews.llvm.org/D51893
+
+diff --git a/llvm/lib/Target/X86/X86InstrCompiler.td b/llvm/lib/Target/X86/X86InstrCompiler.td
+index b3371c96cc2..f0722b7d271 100644
+--- a/llvm/lib/Target/X86/X86InstrCompiler.td
++++ b/llvm/lib/Target/X86/X86InstrCompiler.td
+@@ -397,30 +397,41 @@ def : Pat<(sub GR64:$op, (i64 (X86setcc_c X86_COND_B, EFLAGS))),
+ //
+ let SchedRW = [WriteMicrocoded] in {
+ let Defs = [ECX,EDI,ESI], Uses = [ECX,EDI,ESI], isCodeGenOnly = 1 in {
+-def REP_MOVSB_32 : I<0xA4, RawFrm, (outs), (ins), "{rep;movsb|rep movsb}",
+-                    [(X86rep_movs i8)], IIC_REP_MOVS>, REP,
+-                   Requires<[Not64BitMode]>;
+-def REP_MOVSW_32 : I<0xA5, RawFrm, (outs), (ins), "{rep;movsw|rep movsw}",
+-                    [(X86rep_movs i16)], IIC_REP_MOVS>, REP, OpSize16,
+-                   Requires<[Not64BitMode]>;
+-def REP_MOVSD_32 : I<0xA5, RawFrm, (outs), (ins), "{rep;movsl|rep movsd}",
+-                    [(X86rep_movs i32)], IIC_REP_MOVS>, REP, OpSize32,
+-                   Requires<[Not64BitMode]>;
++def REP_MOVSB_32 : I<0xA4, RawFrm, (outs), (ins),
++                    "{rep;movsb (%esi), %es:(%edi)|rep movsb es:[edi], [esi]}",
++                    [(X86rep_movs i8)]>, REP, AdSize32,
++                   Requires<[NotLP64]>;
++def REP_MOVSW_32 : I<0xA5, RawFrm, (outs), (ins),
++                    "{rep;movsw (%esi), %es:(%edi)|rep movsw es:[edi], [esi]}",
++                    [(X86rep_movs i16)]>, REP, AdSize32, OpSize16,
++                   Requires<[NotLP64]>;
++def REP_MOVSD_32 : I<0xA5, RawFrm, (outs), (ins),
++                    "{rep;movsl (%esi), %es:(%edi)|rep movsd es:[edi], [esi]}",
++                    [(X86rep_movs i32)]>, REP, AdSize32, OpSize32,
++                   Requires<[NotLP64]>;
++def REP_MOVSQ_32 : RI<0xA5, RawFrm, (outs), (ins),
++                    "{rep;movsq (%esi), %es:(%edi)|rep movsq es:[edi], [esi]}",
++                    [(X86rep_movs i64)]>, REP, AdSize32,
++                   Requires<[NotLP64, In64BitMode]>;
+ }
+ 
+ let Defs = [RCX,RDI,RSI], Uses = [RCX,RDI,RSI], isCodeGenOnly = 1 in {
+-def REP_MOVSB_64 : I<0xA4, RawFrm, (outs), (ins), "{rep;movsb|rep movsb}",
+-                    [(X86rep_movs i8)], IIC_REP_MOVS>, REP,
+-                   Requires<[In64BitMode]>;
+-def REP_MOVSW_64 : I<0xA5, RawFrm, (outs), (ins), "{rep;movsw|rep movsw}",
+-                    [(X86rep_movs i16)], IIC_REP_MOVS>, REP, OpSize16,
+-                   Requires<[In64BitMode]>;
+-def REP_MOVSD_64 : I<0xA5, RawFrm, (outs), (ins), "{rep;movsl|rep movsd}",
+-                    [(X86rep_movs i32)], IIC_REP_MOVS>, REP, OpSize32,
+-                   Requires<[In64BitMode]>;
+-def REP_MOVSQ_64 : RI<0xA5, RawFrm, (outs), (ins), "{rep;movsq|rep movsq}",
+-                    [(X86rep_movs i64)], IIC_REP_MOVS>, REP,
+-                   Requires<[In64BitMode]>;
++def REP_MOVSB_64 : I<0xA4, RawFrm, (outs), (ins),
++                    "{rep;movsb (%rsi), %es:(%rdi)|rep movsb es:[rdi], [rsi]}",
++                    [(X86rep_movs i8)]>, REP, AdSize64,
++                   Requires<[IsLP64]>;
++def REP_MOVSW_64 : I<0xA5, RawFrm, (outs), (ins),
++                    "{rep;movsw (%rsi), %es:(%rdi)|rep movsw es:[rdi], [rsi]}",
++                    [(X86rep_movs i16)]>, REP, AdSize64, OpSize16,
++                   Requires<[IsLP64]>;
++def REP_MOVSD_64 : I<0xA5, RawFrm, (outs), (ins),
++                    "{rep;movsl (%rsi), %es:(%rdi)|rep movsdi es:[rdi], [rsi]}",
++                    [(X86rep_movs i32)]>, REP, AdSize64, OpSize32,
++                   Requires<[IsLP64]>;
++def REP_MOVSQ_64 : RI<0xA5, RawFrm, (outs), (ins),
++                    "{rep;movsq (%rsi), %es:(%rdi)|rep movsq es:[rdi], [rsi]}",
++                    [(X86rep_movs i64)]>, REP, AdSize64,
++                   Requires<[IsLP64]>;
+ }
+ 
+ // FIXME: Should use "(X86rep_stos AL)" as the pattern.
+diff --git a/llvm/lib/Target/X86/X86SelectionDAGInfo.cpp b/llvm/lib/Target/X86/X86SelectionDAGInfo.cpp
+index e131f1a1e4b..eb861cebd57 100644
+--- a/llvm/lib/Target/X86/X86SelectionDAGInfo.cpp
++++ b/llvm/lib/Target/X86/X86SelectionDAGInfo.cpp
+@@ -255,14 +255,15 @@ SDValue X86SelectionDAGInfo::EmitTargetCodeForMemcpy(
+     }
+   }
+ 
++  bool Use64BitRegs = Subtarget.isTarget64BitLP64();
+   SDValue InFlag;
+-  Chain = DAG.getCopyToReg(Chain, dl, Subtarget.is64Bit() ? X86::RCX : X86::ECX,
++  Chain = DAG.getCopyToReg(Chain, dl, Use64BitRegs ? X86::RCX : X86::ECX,
+                            DAG.getIntPtrConstant(Repeats.Count(), dl), InFlag);
+   InFlag = Chain.getValue(1);
+-  Chain = DAG.getCopyToReg(Chain, dl, Subtarget.is64Bit() ? X86::RDI : X86::EDI,
++  Chain = DAG.getCopyToReg(Chain, dl, Use64BitRegs ? X86::RDI : X86::EDI,
+                            Dst, InFlag);
+   InFlag = Chain.getValue(1);
+-  Chain = DAG.getCopyToReg(Chain, dl, Subtarget.is64Bit() ? X86::RSI : X86::ESI,
++  Chain = DAG.getCopyToReg(Chain, dl, Use64BitRegs ? X86::RSI : X86::ESI,
+                            Src, InFlag);
+   InFlag = Chain.getValue(1);
+ 
+diff --git a/llvm/test/CodeGen/X86/pr38865.ll b/llvm/test/CodeGen/X86/pr38865.ll
+new file mode 100644
+index 00000000000..5c8689203c7
+--- /dev/null
++++ b/llvm/test/CodeGen/X86/pr38865.ll
+@@ -0,0 +1,47 @@
++; NOTE: Assertions have been autogenerated by utils/update_llc_test_checks.py
++; RUN: llc -show-mc-encoding < %s | FileCheck %s
++
++target datalayout = "e-m:e-p:32:32-i64:64-f80:128-n8:16:32:64-S128"
++target triple = "x86_64-unknown-linux-gnux32"
++
++%struct.a = type { [65 x i32] }
++
++@c = global %struct.a zeroinitializer, align 4
++
++define void @e() nounwind {
++; CHECK-LABEL: e:
++; CHECK:       # %bb.0: # %entry
++; CHECK-NEXT:    pushq %rbx # encoding: [0x53]
++; CHECK-NEXT:    subl $528, %esp # encoding: [0x81,0xec,0x10,0x02,0x00,0x00]
++; CHECK-NEXT:    # imm = 0x210
++; CHECK-NEXT:    leal {{[0-9]+}}(%rsp), %ebx # encoding: [0x8d,0x9c,0x24,0x08,0x01,0x00,0x00]
++; CHECK-NEXT:    movl $c, %esi # encoding: [0xbe,A,A,A,A]
++; CHECK-NEXT:    # fixup A - offset: 1, value: c, kind: FK_Data_4
++; CHECK-NEXT:    movl $260, %edx # encoding: [0xba,0x04,0x01,0x00,0x00]
++; CHECK-NEXT:    # imm = 0x104
++; CHECK-NEXT:    movl %ebx, %edi # encoding: [0x89,0xdf]
++; CHECK-NEXT:    callq memcpy # encoding: [0xe8,A,A,A,A]
++; CHECK-NEXT:    # fixup A - offset: 1, value: memcpy-4, kind: FK_PCRel_4
++; CHECK-NEXT:    movl $32, %ecx # encoding: [0xb9,0x20,0x00,0x00,0x00]
++; CHECK-NEXT:    movl %esp, %edi # encoding: [0x89,0xe7]
++; CHECK-NEXT:    movl %ebx, %esi # encoding: [0x89,0xde]
++; CHECK-NEXT:    rep;movsq (%esi), %es:(%edi) # encoding: [0xf3,0x67,0x48,0xa5]
++; CHECK-NEXT:    movl {{[0-9]+}}(%esp), %eax # encoding: [0x67,0x8b,0x84,0x24,0x08,0x02,0x00,0x00]
++; CHECK-NEXT:    movl %eax, {{[0-9]+}}(%esp) # encoding: [0x67,0x89,0x84,0x24,0x00,0x01,0x00,0x00]
++; CHECK-NEXT:    callq d # encoding: [0xe8,A,A,A,A]
++; CHECK-NEXT:    # fixup A - offset: 1, value: d-4, kind: FK_PCRel_4
++; CHECK-NEXT:    addl $528, %esp # encoding: [0x81,0xc4,0x10,0x02,0x00,0x00]
++; CHECK-NEXT:    # imm = 0x210
++; CHECK-NEXT:    popq %rbx # encoding: [0x5b]
++; CHECK-NEXT:    retq # encoding: [0xc3]
++entry:
++  %byval-temp = alloca %struct.a, align 8
++  %0 = bitcast %struct.a* %byval-temp to i8*
++  call void @llvm.memcpy.p0i8.p0i8.i32(i8* nonnull align 8 %0, i8* align 4 bitcast (%struct.a* @c to i8*), i32 260, i1 false)
++  call void @d(%struct.a* byval nonnull align 8 %byval-temp)
++  ret void
++}
++
++declare void @d(%struct.a* byval align 8) local_unnamed_addr #1
++
++declare void @llvm.memcpy.p0i8.p0i8.i32(i8* nocapture writeonly, i8* nocapture readonly, i32, i1)
