@@ -1,0 +1,37 @@
+From 53d79e398048f56bb067ca7ab5a75d2d511a3e09 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 9 Sep 2018 22:47:09 +0200
+Subject: [PATCH 01/15] sanitizer: fix integer overflow
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I9ceeb8455cf21427fa086e2c5a91d6b18414bd56
+---
+ vpx_dsp/fastssim.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/vpx_dsp/fastssim.c b/vpx_dsp/fastssim.c
+index 0469071a1..d4b720191 100644
+--- a/vpx_dsp/fastssim.c
++++ b/vpx_dsp/fastssim.c
+@@ -347,11 +347,11 @@ static void fs_calc_structure(fs_ctx *_ctx, int _l, int bit_depth) {
+         unsigned g2;
+         unsigned gx;
+         unsigned gy;
+-        g1 = abs((int)im1[(j + 1) * w + i + 1] - (int)im1[j * w + i]);
+-        g2 = abs((int)im1[(j + 1) * w + i] - (int)im1[j * w + i + 1]);
++        g1 = abs((int)(im1[(j + 1) * w + i + 1] - im1[j * w + i]));
++        g2 = abs((int)(im1[(j + 1) * w + i] - im1[j * w + i + 1]));
+         gx = 4 * FS_MAXI(g1, g2) + FS_MINI(g1, g2);
+-        g1 = abs((int)im2[(j + 1) * w + i + 1] - (int)im2[j * w + i]);
+-        g2 = abs((int)im2[(j + 1) * w + i] - (int)im2[j * w + i + 1]);
++        g1 = abs((int)(im2[(j + 1) * w + i + 1] - im2[j * w + i]));
++        g2 = abs((int)(im2[(j + 1) * w + i] - im2[j * w + i + 1]));
+         gy = 4 * FS_MAXI(g1, g2) + FS_MINI(g1, g2);
+         gx_buf[(j & 7) * stride + i + 4] = gx;
+         gy_buf[(j & 7) * stride + i + 4] = gy;
+-- 
+2.16.4
+

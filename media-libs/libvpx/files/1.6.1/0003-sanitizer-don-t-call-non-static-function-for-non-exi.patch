@@ -1,7 +1,7 @@
-From d5cb02e8b49a76a70baf7366422846157df84127 Mon Sep 17 00:00:00 2001
+From e9826c18f04d26395cb15264e928555b586f59f5 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 9 Sep 2018 16:45:04 +0200
-Subject: [PATCH 02/12] sanitizer: don't call non-static function for
+Subject: [PATCH 03/15] sanitizer: don't call non-static function for
  non-existing object
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -14,7 +14,7 @@ Change-Id: I70e4943170deefc7d61a9ae725bb3bd18d56f4e6
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/third_party/googletest/src/include/gtest/gtest.h b/third_party/googletest/src/include/gtest/gtest.h
-index 4f3804f70..1ff1fd9ce 100644
+index 581a44e95..1d44ec231 100644
 --- a/third_party/googletest/src/include/gtest/gtest.h
 +++ b/third_party/googletest/src/include/gtest/gtest.h
 @@ -19220,7 +19220,7 @@ class WithParamInterface {

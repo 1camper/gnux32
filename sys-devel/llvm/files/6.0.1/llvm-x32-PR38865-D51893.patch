@@ -1,4 +1,4 @@
-commit 8236eb023b4e7a026d5526b6a7f13f03d988677d
+commit 73d2e459e68964348cc46e7bbfd8207c77f8950f
 Author: Craig Topper <craig.topper@intel.com>
 Date:   Wed Sep 12 01:57:22 2018 +0000
 
@@ -16,6 +16,8 @@ Date:   Wed Sep 12 01:57:22 2018 +0000
     Subscribers: llvm-commits
     
     Differential Revision: https://reviews.llvm.org/D51893
+    
+    cherry-picked from 07a8796d7fe222ffbbb6a34bf367fac2564e5c56
 
 diff --git a/llvm/lib/Target/X86/X86InstrCompiler.td b/llvm/lib/Target/X86/X86InstrCompiler.td
 index b3371c96cc2..f0722b7d271 100644

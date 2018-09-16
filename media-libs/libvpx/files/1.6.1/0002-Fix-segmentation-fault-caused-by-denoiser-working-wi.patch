@@ -1,0 +1,49 @@
+From 932aa1710eb65c14db1ea8661f5fa7bc538f9b09 Mon Sep 17 00:00:00 2001
+From: Jerome Jiang <jianj@google.com>
+Date: Fri, 17 Feb 2017 17:56:08 -0800
+Subject: [PATCH 02/15] Fix segmentation fault caused by denoiser working with
+ spatial SVC.
+
+Re-enable the affected test.
+BUG=webm:1374
+
+Change-Id: I98cd49403927123546d1d0056660b98c9cb8babb
+---
+ vp9/encoder/vp9_encoder.c    | 5 +++--
+ vpx_dsp/x86/deblock_sse2.asm | 4 ++--
+ 2 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/vp9/encoder/vp9_encoder.c b/vp9/encoder/vp9_encoder.c
+index 432eac8da..f4e46ea20 100644
+--- a/vp9/encoder/vp9_encoder.c
++++ b/vp9/encoder/vp9_encoder.c
+@@ -2966,8 +2966,9 @@ static void set_size_dependent_vars(VP9_COMP *cpi, int *q, int *bottom_index,
+       case 6: l = 150; break;
+     }
+     if (!cpi->common.postproc_state.limits) {
+-      cpi->common.postproc_state.limits = vpx_calloc(
+-          cpi->common.width, sizeof(*cpi->common.postproc_state.limits));
++      cpi->common.postproc_state.limits =
++          vpx_calloc(cpi->un_scaled_source->y_width,
++                     sizeof(*cpi->common.postproc_state.limits));
+     }
+     vp9_denoise(cpi->Source, cpi->Source, l, cpi->common.postproc_state.limits);
+   }
+diff --git a/vpx_dsp/x86/deblock_sse2.asm b/vpx_dsp/x86/deblock_sse2.asm
+index ebca50930..bd8fd1248 100644
+--- a/vpx_dsp/x86/deblock_sse2.asm
++++ b/vpx_dsp/x86/deblock_sse2.asm
+@@ -78,8 +78,8 @@
+ %endmacro
+ 
+ %macro UPDATE_FLIMIT 0
+-        movdqa      xmm2,       XMMWORD PTR [rbx]
+-        movdqa      [rsp],      xmm2
++        movdqu      xmm2,       XMMWORD PTR [rbx]
++        movdqu      [rsp],      xmm2
+         add         rbx,        16
+ %endmacro
+ 
+-- 
+2.16.4
+

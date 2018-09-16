@@ -1,7 +1,7 @@
-From e3a0bc0fd8603be6b76db45b7437c4027d2c7537 Mon Sep 17 00:00:00 2001
+From 7af4c560f4ac20982ed1e64422542a9976f88e77 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 9 Sep 2018 16:45:04 +0200
-Subject: [PATCH 02/18] sanitizer: don't call non-static function for
+Subject: [PATCH 02/13] sanitizer: don't call non-static function for
  non-existing object
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

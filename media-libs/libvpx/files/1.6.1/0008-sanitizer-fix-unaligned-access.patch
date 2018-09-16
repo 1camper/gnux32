@@ -1,0 +1,85 @@
+From 6bf703b3eeb6fc0b69dd124fcc448f4fba11581d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Thu, 13 Sep 2018 05:20:21 +0200
+Subject: [PATCH 08/15] sanitizer: fix unaligned access
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I0a89982d173addfb69ea5a777b86dc585aa4d676
+---
+ vpx_dsp/x86/avg_intrin_sse2.c |  8 ++++++++
+ vpx_dsp/x86/variance_sse2.c   |  4 ++--
+ vpx_ports/mem.h               | 14 ++++++++++++++
+ 3 files changed, 24 insertions(+), 2 deletions(-)
+
+diff --git a/vpx_dsp/x86/avg_intrin_sse2.c b/vpx_dsp/x86/avg_intrin_sse2.c
+index b0a104bad..b9efe9775 100644
+--- a/vpx_dsp/x86/avg_intrin_sse2.c
++++ b/vpx_dsp/x86/avg_intrin_sse2.c
+@@ -13,6 +13,14 @@
+ #include "./vpx_dsp_rtcd.h"
+ #include "vpx_ports/mem.h"
+ 
++/* Unaligned loads through _mm_loadl_epi64 get flagged by the sanitizer  */
++static inline __m128i _mm_loadu_epi64(const __m128i *p) {
++  __m64 v;
++  memcpy(&v, p, sizeof(v));
++  return _mm_set_epi64((__m64)0LL, v);
++}
++#define _mm_loadl_epi64 _mm_loadu_epi64
++
+ void vpx_minmax_8x8_sse2(const uint8_t *s, int p, const uint8_t *d, int dp,
+                          int *min, int *max) {
+   __m128i u0, s0, d0, diff, maxabsdiff, minabsdiff, negdiff, absdiff0, absdiff;
+diff --git a/vpx_dsp/x86/variance_sse2.c b/vpx_dsp/x86/variance_sse2.c
+index 1161da491..707503a0e 100644
+--- a/vpx_dsp/x86/variance_sse2.c
++++ b/vpx_dsp/x86/variance_sse2.c
+@@ -36,8 +36,8 @@ unsigned int vpx_get_mb_ss_sse2(const int16_t *src) {
+ 
+ #define READ64(p, stride, i)                                  \
+   _mm_unpacklo_epi8(                                          \
+-      _mm_cvtsi32_si128(*(const uint32_t *)(p + i * stride)), \
+-      _mm_cvtsi32_si128(*(const uint32_t *)(p + (i + 1) * stride)))
++      _mm_cvtsi32_si128(vpx_load_unaligned_uint32(p + i * stride)), \
++      _mm_cvtsi32_si128(vpx_load_unaligned_uint32(p + (i + 1) * stride)))
+ 
+ static void get4x4var_sse2(const uint8_t *src, int src_stride,
+                            const uint8_t *ref, int ref_stride,
+diff --git a/vpx_ports/mem.h b/vpx_ports/mem.h
+index 2d49b7a06..6fd2f8cf0 100644
+--- a/vpx_ports/mem.h
++++ b/vpx_ports/mem.h
+@@ -11,6 +11,7 @@
+ #ifndef VPX_PORTS_MEM_H_
+ #define VPX_PORTS_MEM_H_
+ 
++#include <string.h>
+ #include "vpx_config.h"
+ #include "vpx/vpx_integer.h"
+ 
+@@ -23,6 +24,19 @@
+ #define DECLARE_ALIGNED(n, typ, val) typ val
+ #endif
+ 
++/* Use for unaligned load/stores that get flagged by the sanitizer.
++ * All modern compilers compile this into simple moves.
++ */
++static inline void vpx_store_unaligned_uint32(void* dst, uint32_t v) {
++    memcpy(dst, &v, sizeof(v));
++}
++
++static inline uint32_t vpx_load_unaligned_uint32(const void* src) {
++    uint32_t v;
++    memcpy(&v, src, sizeof(v));
++    return v;
++}
++
+ /* Indicates that the usage of the specified variable has been audited to assure
+  * that it's safe to use uninitialized. Silences 'may be used uninitialized'
+  * warnings on gcc.
+-- 
+2.16.4
+

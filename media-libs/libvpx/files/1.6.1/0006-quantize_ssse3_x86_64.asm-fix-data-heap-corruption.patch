@@ -1,0 +1,44 @@
+From 2235f1e83107377b33a34771938b9c70be4f2078 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Tue, 11 Sep 2018 16:00:03 +0200
+Subject: [PATCH 06/15] quantize_ssse3_x86_64.asm: fix data/heap corruption
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I7213ee0b39373d1cb9b81266321c81e65564aab1
+---
+ vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm | 2 +-
+ vpx_dsp/x86/quantize_ssse3_x86_64.asm         | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm b/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm
+index ec61c0c3a..9af6ccb7f 100644
+--- a/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm
++++ b/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm
+@@ -171,7 +171,7 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+   pshuflw                         m7, m8, 0x1
+   pmaxsw                          m8, m7
+   pextrw                          r6, m8, 0
+-  mov                           [r2], r6
++  mov                           [r2], r6w
+   RET
+ 
+   ; skip-block, i.e. just write all zeroes
+diff --git a/vpx_dsp/x86/quantize_ssse3_x86_64.asm b/vpx_dsp/x86/quantize_ssse3_x86_64.asm
+index ca2153917..b2319c2bd 100644
+--- a/vpx_dsp/x86/quantize_ssse3_x86_64.asm
++++ b/vpx_dsp/x86/quantize_ssse3_x86_64.asm
+@@ -300,7 +300,7 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+   pshuflw                         m7, m8, 0x1
+   pmaxsw                          m8, m7
+   pextrw                          r6, m8, 0
+-  mov                             [r2], r6
++  mov                           [r2], r6w
+   RET
+ 
+   ; skip-block, i.e. just write all zeroes
+-- 
+2.16.4
+

@@ -1,0 +1,1601 @@
+From ded4a07d688dd013988fc2cef6f8c24c1393995d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 16 Sep 2018 15:32:49 +0200
+Subject: [PATCH 13/13] x32 support: x86inc.asm users
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: Ia846bd73657461699d6f6a6d8951f273aa9ea721
+---
+ vp9/encoder/x86/vp9_dct_sse2.asm                 |  2 +-
+ vp9/encoder/x86/vp9_error_sse2.asm               |  6 +-
+ vp9/encoder/x86/vp9_highbd_error_avx.asm         |  2 +-
+ vp9/encoder/x86/vp9_highbd_error_sse2.asm        |  2 +-
+ vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm    | 33 +++++------
+ vpx_dsp/x86/avg_ssse3_x86_64.asm                 |  2 +-
+ vpx_dsp/x86/fwd_txfm_ssse3_x86_64.asm            |  2 +-
+ vpx_dsp/x86/highbd_intrapred_sse2.asm            | 24 ++++----
+ vpx_dsp/x86/highbd_sad4d_sse2.asm                | 22 +++----
+ vpx_dsp/x86/highbd_sad_sse2.asm                  | 20 ++++---
+ vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm | 56 +++++++++++-------
+ vpx_dsp/x86/intrapred_sse2.asm                   | 70 ++++++++++------------
+ vpx_dsp/x86/intrapred_ssse3.asm                  | 26 ++++----
+ vpx_dsp/x86/inv_txfm_ssse3_x86_64.asm            | 10 ++--
+ vpx_dsp/x86/inv_wht_sse2.asm                     |  2 +-
+ vpx_dsp/x86/quantize_avx_x86_64.asm              | 75 ++++++++++++------------
+ vpx_dsp/x86/quantize_ssse3_x86_64.asm            | 37 ++++++------
+ vpx_dsp/x86/sad4d_sse2.asm                       | 24 ++++----
+ vpx_dsp/x86/sad_sse2.asm                         | 19 +++---
+ vpx_dsp/x86/subpel_variance_sse2.asm             | 60 +++++++++++--------
+ vpx_dsp/x86/subtract_sse2.asm                    | 31 +++++-----
+ vpx_dsp/x86/vpx_convolve_copy_sse2.asm           | 12 ++--
+ vpx_dsp/x86/vpx_subpixel_8t_ssse3.asm            | 15 +++--
+ 23 files changed, 287 insertions(+), 265 deletions(-)
+
+diff --git a/vp9/encoder/x86/vp9_dct_sse2.asm b/vp9/encoder/x86/vp9_dct_sse2.asm
+index ced37bd16..8379c4d84 100644
+--- a/vp9/encoder/x86/vp9_dct_sse2.asm
++++ b/vp9/encoder/x86/vp9_dct_sse2.asm
+@@ -44,7 +44,7 @@ SECTION .text
+ %endmacro
+ 
+ INIT_XMM sse2
+-cglobal fwht4x4, 3, 4, 8, input, output, stride
++cglobal fwht4x4, 3, 4, 8, "p", input, "p", output, "d-", stride
+   lea             r3q,       [inputq + strideq*4]
+   movq            m0,        [inputq] ;a1
+   movq            m1,        [inputq + strideq*2] ;b1
+diff --git a/vp9/encoder/x86/vp9_error_sse2.asm b/vp9/encoder/x86/vp9_error_sse2.asm
+index 5b0238272..d0c3bc9ba 100644
+--- a/vp9/encoder/x86/vp9_error_sse2.asm
++++ b/vp9/encoder/x86/vp9_error_sse2.asm
+@@ -18,7 +18,7 @@ SECTION .text
+ ;                         int64_t *ssz)
+ 
+ INIT_XMM sse2
+-cglobal block_error, 3, 3, 8, uqc, dqc, size, ssz
++cglobal block_error, 3, 3, 8, "p", uqc, "p", dqc, "p-", size, "p", ssz
+   pxor      m4, m4                 ; sse accumulator
+   pxor      m6, m6                 ; ssz accumulator
+   pxor      m5, m5                 ; dedicated zero register
+@@ -77,10 +77,10 @@ cglobal block_error, 3, 3, 8, uqc, dqc, size, ssz
+ 
+ ; Compute the sum of squared difference between two int16_t vectors.
+ ; int64_t vp9_block_error_fp(int16_t *coeff, int16_t *dqcoeff,
+-;                            intptr_t block_size)
++;                            int block_size)
+ 
+ INIT_XMM sse2
+-cglobal block_error_fp, 3, 3, 6, uqc, dqc, size
++cglobal block_error_fp, 3, 3, 6, "p", uqc, "p", dqc, "d-", size
+   pxor      m4, m4                 ; sse accumulator
+   pxor      m5, m5                 ; dedicated zero register
+   lea     uqcq, [uqcq+sizeq*2]
+diff --git a/vp9/encoder/x86/vp9_highbd_error_avx.asm b/vp9/encoder/x86/vp9_highbd_error_avx.asm
+index e476323e1..699ff96e0 100644
+--- a/vp9/encoder/x86/vp9_highbd_error_avx.asm
++++ b/vp9/encoder/x86/vp9_highbd_error_avx.asm
+@@ -21,7 +21,7 @@ ALIGN 16
+ ;
+ 
+ INIT_XMM avx
+-cglobal highbd_block_error_8bit, 4, 5, 8, uqc, dqc, size, ssz
++cglobal highbd_block_error_8bit, 4, 5, 8, "p", uqc, "p", dqc, "p-", size, "p", ssz
+   vzeroupper
+ 
+   ; If only one iteration is required, then handle this as a special case.
+diff --git a/vp9/encoder/x86/vp9_highbd_error_sse2.asm b/vp9/encoder/x86/vp9_highbd_error_sse2.asm
+index f3b8f0194..902e02d70 100644
+--- a/vp9/encoder/x86/vp9_highbd_error_sse2.asm
++++ b/vp9/encoder/x86/vp9_highbd_error_sse2.asm
+@@ -21,7 +21,7 @@ ALIGN 16
+ ;
+ 
+ INIT_XMM sse2
+-cglobal highbd_block_error_8bit, 3, 3, 8, uqc, dqc, size, ssz
++cglobal highbd_block_error_8bit, 3, 3, 8, "p", uqc, "p", dqc, "p-", size, "p", ssz
+   pxor      m4, m4                 ; sse accumulator
+   pxor      m6, m6                 ; ssz accumulator
+   pxor      m5, m5                 ; dedicated zero register
+diff --git a/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm b/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm
+index 9af6ccb7f..50f795547 100644
+--- a/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm
++++ b/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm
+@@ -18,19 +18,16 @@ pw_1: times 8 dw 1
+ SECTION .text
+ 
+ %macro QUANTIZE_FP 2
+-cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+-                                shift, qcoeff, dqcoeff, dequant, \
+-                                eob, scan, iscan
++cglobal quantize_%1, 0, %2, 15, "p", coeff, "p-", ncoeff, "d", skip, \
++                                "p", zbin, "p", round, "p", quant, "p", shift, \
++                                "p", qcoeff, "p", dqcoeff, "p", dequant, \
++                                "p", eob, "p", scan, "p", iscan
+   cmp                    dword skipm, 0
+   jne .blank
+ 
+   ; actual quantize loop - setup pointers, rounders, etc.
+-  movifnidn                   coeffq, coeffmp
+-  movifnidn                  ncoeffq, ncoeffmp
+-  mov                             r2, dequantmp
+-  movifnidn                    zbinq, zbinmp
+-  movifnidn                   roundq, roundmp
+-  movifnidn                   quantq, quantmp
++  ASSIGN_ARG dequant, skip
++  LOAD_ARG coeff, ncoeff, dequant, zbin, round, quant
+   mova                            m1, [roundq]             ; m1 = round
+   mova                            m2, [quantq]             ; m2 = quant
+ %ifidn %1, fp_32x32
+@@ -40,9 +37,10 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+   psrlw                           m1, 1                    ; m1 = (m1 + 1) / 2
+ %endif
+   mova                            m3, [r2q]                ; m3 = dequant
+-  mov                             r3, qcoeffmp
+-  mov                             r4, dqcoeffmp
+-  mov                             r5, iscanmp
++  ASSIGN_ARG qcoeff, 3
++  ASSIGN_ARG dqcoeff, 4
++  ASSIGN_ARG iscan, 5
++  LOAD_ARG qcoeff, dqcoeff, iscan
+ %ifidn %1, fp_32x32
+   psllw                           m2, 1
+ %endif
+@@ -163,7 +161,8 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ 
+ .accumulate_eob:
+   ; horizontally accumulate/max eobs and write into [eob] memory pointer
+-  mov                             r2, eobmp
++  ASSIGN_ARG eob, 2
++  LOAD_ARG eob
+   pshufd                          m7, m8, 0xe
+   pmaxsw                          m8, m7
+   pshuflw                         m7, m8, 0xe
+@@ -176,10 +175,10 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ 
+   ; skip-block, i.e. just write all zeroes
+ .blank:
+-  mov                             r0, dqcoeffmp
+-  movifnidn                  ncoeffq, ncoeffmp
+-  mov                             r2, qcoeffmp
+-  mov                             r3, eobmp
++  ASSIGN_ARG dqcoeff, 0
++  ASSIGN_ARG qcoeff, 2
++  ASSIGN_ARG eob, 3
++  LOAD_ARG dqcoeff, ncoeff, qcoeff, eob
+ 
+   lea                            r0q, [r0q+ncoeffq*2]
+   lea                            r2q, [r2q+ncoeffq*2]
+diff --git a/vpx_dsp/x86/avg_ssse3_x86_64.asm b/vpx_dsp/x86/avg_ssse3_x86_64.asm
+index 26412e8e4..851327b75 100644
+--- a/vpx_dsp/x86/avg_ssse3_x86_64.asm
++++ b/vpx_dsp/x86/avg_ssse3_x86_64.asm
+@@ -88,7 +88,7 @@ SECTION .text
+ %endmacro
+ 
+ INIT_XMM ssse3
+-cglobal hadamard_8x8, 3, 5, 10, input, stride, output
++cglobal hadamard_8x8, 3, 5, 10, "p", input, "d-", stride, "p", output
+   lea                r3, [2 * strideq]
+   lea                r4, [4 * strideq]
+ 
+diff --git a/vpx_dsp/x86/fwd_txfm_ssse3_x86_64.asm b/vpx_dsp/x86/fwd_txfm_ssse3_x86_64.asm
+index 78a1dbb24..03208994e 100644
+--- a/vpx_dsp/x86/fwd_txfm_ssse3_x86_64.asm
++++ b/vpx_dsp/x86/fwd_txfm_ssse3_x86_64.asm
+@@ -128,7 +128,7 @@ SECTION .text
+ %endmacro
+ 
+ INIT_XMM ssse3
+-cglobal fdct8x8, 3, 5, 13, input, output, stride
++cglobal fdct8x8, 3, 5, 13, "p", input, "p", output, "d-", stride
+ 
+   mova               m8, [pd_8192]
+   mova              m12, [pw_11585x2]
+diff --git a/vpx_dsp/x86/highbd_intrapred_sse2.asm b/vpx_dsp/x86/highbd_intrapred_sse2.asm
+index c61b62104..482a4b69c 100644
+--- a/vpx_dsp/x86/highbd_intrapred_sse2.asm
++++ b/vpx_dsp/x86/highbd_intrapred_sse2.asm
+@@ -18,7 +18,7 @@ pw_32: times 4 dd 32
+ 
+ SECTION .text
+ INIT_XMM sse2
+-cglobal highbd_dc_predictor_4x4, 4, 5, 4, dst, stride, above, left, goffset
++cglobal highbd_dc_predictor_4x4, 4, 5, 4, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   movq                  m0, [aboveq]
+@@ -41,7 +41,7 @@ cglobal highbd_dc_predictor_4x4, 4, 5, 4, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_dc_predictor_8x8, 4, 5, 4, dst, stride, above, left, goffset
++cglobal highbd_dc_predictor_8x8, 4, 5, 4, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -76,7 +76,7 @@ cglobal highbd_dc_predictor_8x8, 4, 5, 4, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_dc_predictor_16x16, 4, 5, 5, dst, stride, above, left, goffset
++cglobal highbd_dc_predictor_16x16, 4, 5, 5, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -119,7 +119,7 @@ cglobal highbd_dc_predictor_16x16, 4, 5, 5, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_dc_predictor_32x32, 4, 5, 7, dst, stride, above, left, goffset
++cglobal highbd_dc_predictor_32x32, 4, 5, 7, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   mova                  m0, [aboveq]
+@@ -178,7 +178,7 @@ cglobal highbd_dc_predictor_32x32, 4, 5, 7, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_v_predictor_4x4, 3, 3, 1, dst, stride, above
++cglobal highbd_v_predictor_4x4, 3, 3, 1, "p", dst, "p-", stride, "p", above
+   movq                  m0, [aboveq]
+   movq    [dstq          ], m0
+   movq    [dstq+strideq*2], m0
+@@ -188,7 +188,7 @@ cglobal highbd_v_predictor_4x4, 3, 3, 1, dst, stride, above
+   RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_v_predictor_8x8, 3, 3, 1, dst, stride, above
++cglobal highbd_v_predictor_8x8, 3, 3, 1, "p", dst, "p-", stride, "p", above
+   mova                  m0, [aboveq]
+   DEFINE_ARGS dst, stride, stride3
+   lea             stride3q, [strideq*3]
+@@ -204,7 +204,7 @@ cglobal highbd_v_predictor_8x8, 3, 3, 1, dst, stride, above
+   RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_v_predictor_16x16, 3, 4, 2, dst, stride, above
++cglobal highbd_v_predictor_16x16, 3, 4, 2, "p", dst, "p-", stride, "p", above
+   mova                  m0, [aboveq]
+   mova                  m1, [aboveq+16]
+   DEFINE_ARGS dst, stride, stride3, nlines4
+@@ -225,7 +225,7 @@ cglobal highbd_v_predictor_16x16, 3, 4, 2, dst, stride, above
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_v_predictor_32x32, 3, 4, 4, dst, stride, above
++cglobal highbd_v_predictor_32x32, 3, 4, 4, "p", dst, "p-", stride, "p", above
+   mova                  m0, [aboveq]
+   mova                  m1, [aboveq+16]
+   mova                  m2, [aboveq+32]
+@@ -256,7 +256,7 @@ cglobal highbd_v_predictor_32x32, 3, 4, 4, dst, stride, above
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_tm_predictor_4x4, 5, 5, 6, dst, stride, above, left, bps
++cglobal highbd_tm_predictor_4x4, 5, 5, 6, "p", dst, "p-", stride, "p", above, "p", left, "d", bps, one
+   movd                  m1, [aboveq-2]
+   movq                  m0, [aboveq]
+   pshuflw               m1, m1, 0x0
+@@ -295,7 +295,7 @@ cglobal highbd_tm_predictor_4x4, 5, 5, 6, dst, stride, above, left, bps
+   RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_tm_predictor_8x8, 5, 6, 5, dst, stride, above, left, bps, one
++cglobal highbd_tm_predictor_8x8, 5, 6, 5, "p", dst, "p-", stride, "p", above, "p", left, "d", bps, one
+   movd                  m1, [aboveq-2]
+   mova                  m0, [aboveq]
+   pshuflw               m1, m1, 0x0
+@@ -339,7 +339,7 @@ cglobal highbd_tm_predictor_8x8, 5, 6, 5, dst, stride, above, left, bps, one
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_tm_predictor_16x16, 5, 5, 8, dst, stride, above, left, bps
++cglobal highbd_tm_predictor_16x16, 5, 5, 8, "p", dst, "p-", stride, "p", above, "p", left, "d", bps, one
+   movd                  m2, [aboveq-2]
+   mova                  m0, [aboveq]
+   mova                  m1, [aboveq+16]
+@@ -386,7 +386,7 @@ cglobal highbd_tm_predictor_16x16, 5, 5, 8, dst, stride, above, left, bps
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_tm_predictor_32x32, 5, 5, 8, dst, stride, above, left, bps
++cglobal highbd_tm_predictor_32x32, 5, 5, 8, "p", dst, "p-", stride, "p", above, "p", left, "d", bps, one
+   movd                  m0, [aboveq-2]
+   mova                  m1, [aboveq]
+   mova                  m2, [aboveq+16]
+diff --git a/vpx_dsp/x86/highbd_sad4d_sse2.asm b/vpx_dsp/x86/highbd_sad4d_sse2.asm
+index 6c2a61e01..369110b33 100644
+--- a/vpx_dsp/x86/highbd_sad4d_sse2.asm
++++ b/vpx_dsp/x86/highbd_sad4d_sse2.asm
+@@ -215,11 +215,13 @@ SECTION .text
+ ; where NxN = 64x64, 32x32, 16x16, 16x8, 8x16 or 8x8
+ %macro HIGH_SADNXN4D 2
+ %if UNIX64
+-cglobal highbd_sad%1x%2x4d, 5, 8, 8, src, src_stride, ref1, ref_stride, \
+-                              res, ref2, ref3, ref4
++cglobal highbd_sad%1x%2x4d, 5, 8, 8, "p", src, "d-", src_stride, \
++                                     "p", ref1, "d-", ref_stride, \
++                                     "p", res, ref2, ref3, ref4
+ %else
+-cglobal highbd_sad%1x%2x4d, 4, 7, 8, src, src_stride, ref1, ref_stride, \
+-                              ref2, ref3, ref4
++cglobal highbd_sad%1x%2x4d, 4, 7, 8, "p", src, "d-", src_stride, \
++                                     "p", ref1, "d-", ref_stride, \
++                                     "p", ref2, ref3, ref4
+ %endif
+ 
+ ; set m1
+@@ -229,12 +231,10 @@ cglobal highbd_sad%1x%2x4d, 4, 7, 8, src, src_stride, ref1, ref_stride, \
+   pshufd                m1, m1, 0x0
+   pop                 srcq
+ 
+-  movsxdifnidn src_strideq, src_strided
+-  movsxdifnidn ref_strideq, ref_strided
+-  mov                ref2q, [ref1q+gprsize*1]
+-  mov                ref3q, [ref1q+gprsize*2]
+-  mov                ref4q, [ref1q+gprsize*3]
+-  mov                ref1q, [ref1q+gprsize*0]
++  mov                ref2p, [ref1q+ptrsize*1]
++  mov                ref3p, [ref1q+ptrsize*2]
++  mov                ref4p, [ref1q+ptrsize*3]
++  mov                ref1p, [ref1q+ptrsize*0]
+ 
+ ; convert byte pointers to short pointers
+   shl                 srcq, 1
+@@ -265,7 +265,7 @@ cglobal highbd_sad%1x%2x4d, 4, 7, 8, src, src_stride, ref1, ref_stride, \
+   paddd                 m4, m0
+   paddd                 m6, m1
+   punpcklqdq            m4, m6
+-  movifnidn             r4, r4mp
++  LOAD_ARG 4
+   movu                [r4], m4
+   RET
+ %endmacro
+diff --git a/vpx_dsp/x86/highbd_sad_sse2.asm b/vpx_dsp/x86/highbd_sad_sse2.asm
+index bc4b28db2..dc5d62e6e 100644
+--- a/vpx_dsp/x86/highbd_sad_sse2.asm
++++ b/vpx_dsp/x86/highbd_sad_sse2.asm
+@@ -15,19 +15,23 @@ SECTION .text
+ %macro HIGH_SAD_FN 4
+ %if %4 == 0
+ %if %3 == 5
+-cglobal highbd_sad%1x%2, 4, %3, 7, src, src_stride, ref, ref_stride, n_rows
++cglobal highbd_sad%1x%2, 4, %3, 7, "p", src, "d-", src_stride, \
++                                   "p", ref, "d-", ref_stride, n_rows
+ %else ; %3 == 7
+-cglobal highbd_sad%1x%2, 4, %3, 7, src, src_stride, ref, ref_stride, \
++cglobal highbd_sad%1x%2, 4, %3, 7, "p", src, "d-", src_stride, \
++                                   "p", ref, "d-", ref_stride, \
+                             src_stride3, ref_stride3, n_rows
+ %endif ; %3 == 5/7
+ %else ; avg
+ %if %3 == 5
+-cglobal highbd_sad%1x%2_avg, 5, 1 + %3, 7, src, src_stride, ref, ref_stride, \
+-                                    second_pred, n_rows
++cglobal highbd_sad%1x%2_avg, 5, 1 + %3, 7, "p", src, "d-", src_stride, \
++                                           "p", ref, "d-", ref_stride, \
++                                           "p", second_pred, n_rows
+ %else ; %3 == 7
+-cglobal highbd_sad%1x%2_avg, 5, ARCH_X86_64 + %3, 7, src, src_stride, \
+-                                              ref, ref_stride, \
+-                                              second_pred, \
++cglobal highbd_sad%1x%2_avg, 5, ARCH_X86_64 + %3, 7, \
++                                           "p", src, "d-", src_stride, \
++                                           "p", ref, "d-", ref_stride, \
++                                           "p", second_pred, \
+                                               src_stride3, ref_stride3
+ %if ARCH_X86_64
+ %define n_rowsd r7d
+@@ -36,8 +40,6 @@ cglobal highbd_sad%1x%2_avg, 5, ARCH_X86_64 + %3, 7, src, src_stride, \
+ %endif ; x86-32/64
+ %endif ; %3 == 5/7
+ %endif ; avg/sad
+-  movsxdifnidn src_strideq, src_strided
+-  movsxdifnidn ref_strideq, ref_strided
+ %if %3 == 7
+   lea         src_stride3q, [src_strideq*3]
+   lea         ref_stride3q, [ref_strideq*3]
+diff --git a/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm b/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
+index 30ee81b68..06fb0ecb8 100644
+--- a/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
++++ b/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
+@@ -70,7 +70,7 @@ SECTION .text
+   pshufd               m4, m6, 0x1
+   paddd                m7, m3
+   paddd                m6, m4
+-  mov                  r1, ssem         ; r1 = unsigned int *sse
++  mov                 r1p, ssemp        ; r1 = unsigned int *sse
+   movd               [r1], m7           ; store sse
+   movd                rax, m6           ; store sum as return value
+ %endif
+@@ -93,25 +93,31 @@ SECTION .text
+ 
+ %ifdef PIC    ; 64bit PIC
+   %if %2 == 1 ; avg
+-    cglobal highbd_sub_pixel_avg_variance%1xh, 9, 10, 13, src, src_stride, \
+-                                      x_offset, y_offset, \
+-                                      dst, dst_stride, \
+-                                      sec, sec_stride, height, sse
++    cglobal highbd_sub_pixel_avg_variance%1xh, 9, 10, 13, \
++                                      "p", src, "p-", src_stride, \
++                                      "d", x_offset, "d", y_offset, \
++                                      "p", dst, "p-", dst_stride, \
++                                      "p", sec, "p-", sec_stride, \
++                                      "d", height, "p", sse
+     %define sec_str sec_strideq
+   %else
+-    cglobal highbd_sub_pixel_variance%1xh, 7, 8, 13, src, src_stride, x_offset, \
+-                                  y_offset, dst, dst_stride, height, sse
++    cglobal highbd_sub_pixel_variance%1xh, 7, 8, 13, \
++                                  "p", src, "p-", src_stride, \
++                                  "d", x_offset, "d", y_offset, \
++                                  "p", dst, "p-", dst_stride, \
++                                  "d", height, "p", sse
+   %endif
+   %define block_height heightd
+   %define bilin_filter sseq
+ %else
+   %if ARCH_X86=1 && CONFIG_PIC=1
+     %if %2 == 1 ; avg
+-      cglobal highbd_sub_pixel_avg_variance%1xh, 7, 7, 13, src, src_stride, \
+-                                  x_offset, y_offset, \
+-                                  dst, dst_stride, \
+-                                  sec, sec_stride, \
+-                                  height, sse, g_bilin_filter, g_pw_8
++      cglobal highbd_sub_pixel_avg_variance%1xh, 7, 7, 13, \
++                                  "p", src, "p-", src_stride, \
++                                  "d", x_offset, "d", y_offset, \
++                                  "p", dst, "p-", dst_stride, \
++                                  "p", sec, "p-", sec_stride, \
++                                  "d", height, "p", sse, g_bilin_filter, g_pw_8
+       %define block_height dword heightm
+       %define sec_str sec_stridemp
+ 
+@@ -129,9 +135,11 @@ SECTION .text
+ 
+       LOAD_IF_USED 0, 1         ; load eax, ecx back
+     %else
+-      cglobal highbd_sub_pixel_variance%1xh, 7, 7, 13, src, src_stride, \
+-                                x_offset, y_offset, dst, dst_stride, height, \
+-                                sse, g_bilin_filter, g_pw_8
++      cglobal highbd_sub_pixel_variance%1xh, 7, 7, 13, \
++                                  "p", src, "p-", src_stride, \
++                                  "d", x_offset, "d", y_offset, \
++                                  "p", dst, "p-", dst_stride, \
++                                  "d", height, "p", sse, g_bilin_filter, g_pw_8
+       %define block_height heightd
+ 
+       ; Store bilin_filter and pw_8 location in stack
+@@ -151,11 +159,12 @@ SECTION .text
+   %else
+     %if %2 == 1 ; avg
+       cglobal highbd_sub_pixel_avg_variance%1xh, 7 + 2 * ARCH_X86_64, \
+-                        7 + 2 * ARCH_X86_64, 13, src, src_stride, \
+-                                             x_offset, y_offset, \
+-                                             dst, dst_stride, \
+-                                             sec, sec_stride, \
+-                                             height, sse
++                        7 + 2 * ARCH_X86_64, 13, \
++                                             "p", src, "p-", src_stride, \
++                                             "d", x_offset, "d", y_offset, \
++                                             "p", dst, "p-", dst_stride, \
++                                             "p", sec, "p-", sec_stride, \
++                                             "d", height, "p", sse
+       %if ARCH_X86_64
+       %define block_height heightd
+       %define sec_str sec_strideq
+@@ -164,8 +173,11 @@ SECTION .text
+       %define sec_str sec_stridemp
+       %endif
+     %else
+-      cglobal highbd_sub_pixel_variance%1xh, 7, 7, 13, src, src_stride, \
+-                              x_offset, y_offset, dst, dst_stride, height, sse
++      cglobal highbd_sub_pixel_variance%1xh, 7, 7, 13, \
++                                             "p", src, "p-", src_stride, \
++                                             "d", x_offset, "d", y_offset, \
++                                             "p", dst, "p-", dst_stride, \
++                                             "d", height, "p", sse
+       %define block_height heightd
+     %endif
+ 
+diff --git a/vpx_dsp/x86/intrapred_sse2.asm b/vpx_dsp/x86/intrapred_sse2.asm
+index cd6a6ae98..4353250bb 100644
+--- a/vpx_dsp/x86/intrapred_sse2.asm
++++ b/vpx_dsp/x86/intrapred_sse2.asm
+@@ -42,7 +42,7 @@ SECTION .text
+ %endmacro
+ 
+ INIT_XMM sse2
+-cglobal d45_predictor_4x4, 3, 4, 4, dst, stride, above, goffset
++cglobal d45_predictor_4x4, 3, 4, 4, "p", dst, "p-", stride, "p", above, goffset
+   GET_GOT     goffsetq
+ 
+   movq                 m0, [aboveq]
+@@ -68,7 +68,7 @@ cglobal d45_predictor_4x4, 3, 4, 4, dst, stride, above, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal d45_predictor_8x8, 3, 4, 4, dst, stride, above, goffset
++cglobal d45_predictor_8x8, 3, 4, 4, "p", dst, "p-", stride, "p", above, goffset
+   GET_GOT     goffsetq
+ 
+   movu                m1, [aboveq]
+@@ -107,7 +107,7 @@ cglobal d45_predictor_8x8, 3, 4, 4, dst, stride, above, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal d207_predictor_4x4, 4, 4, 5, dst, stride, unused, left, goffset
++cglobal d207_predictor_4x4, 4, 4, 5, "p", dst, "p-", stride, "p*", unused, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   movd                m0, [leftq]                ; abcd [byte]
+@@ -134,7 +134,7 @@ cglobal d207_predictor_4x4, 4, 4, 5, dst, stride, unused, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_predictor_4x4, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_predictor_4x4, 4, 5, 3, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   movd                  m2, [leftq]
+@@ -156,8 +156,7 @@ cglobal dc_predictor_4x4, 4, 5, 3, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_left_predictor_4x4, 2, 5, 2, dst, stride, above, left, goffset
+-  movifnidn          leftq, leftmp
++cglobal dc_left_predictor_4x4, 4, 5, 2, "p", dst, "p-", stride, "p*", unused, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -177,7 +176,7 @@ cglobal dc_left_predictor_4x4, 2, 5, 2, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_top_predictor_4x4, 3, 5, 2, dst, stride, above, left, goffset
++cglobal dc_top_predictor_4x4, 3, 5, 2, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -197,7 +196,7 @@ cglobal dc_top_predictor_4x4, 3, 5, 2, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_predictor_8x8, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_predictor_8x8, 4, 5, 3, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -226,7 +225,7 @@ cglobal dc_predictor_8x8, 4, 5, 3, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_top_predictor_8x8, 3, 5, 2, dst, stride, above, left, goffset
++cglobal dc_top_predictor_8x8, 3, 5, 3, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -252,8 +251,7 @@ cglobal dc_top_predictor_8x8, 3, 5, 2, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_left_predictor_8x8, 2, 5, 2, dst, stride, above, left, goffset
+-  movifnidn          leftq, leftmp
++cglobal dc_left_predictor_8x8, 4, 5, 3, "p", dst, "p-", stride, "p*", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -279,7 +277,7 @@ cglobal dc_left_predictor_8x8, 2, 5, 2, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_128_predictor_4x4, 2, 5, 1, dst, stride, above, left, goffset
++cglobal dc_128_predictor_4x4, 2, 5, 1, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   DEFINE_ARGS dst, stride, stride3
+@@ -293,7 +291,7 @@ cglobal dc_128_predictor_4x4, 2, 5, 1, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_128_predictor_8x8, 2, 5, 1, dst, stride, above, left, goffset
++cglobal dc_128_predictor_8x8, 2, 5, 1, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   DEFINE_ARGS dst, stride, stride3
+@@ -312,7 +310,7 @@ cglobal dc_128_predictor_8x8, 2, 5, 1, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_predictor_16x16, 4, 5, 3, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -345,7 +343,7 @@ cglobal dc_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
+ 
+ 
+ INIT_XMM sse2
+-cglobal dc_top_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_top_predictor_16x16, 4, 5, 3, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -374,7 +372,7 @@ cglobal dc_top_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal dc_left_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_left_predictor_16x16, 4, 5, 3, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -403,7 +401,7 @@ cglobal dc_left_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal dc_128_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_128_predictor_16x16, 4, 5, 3, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   DEFINE_ARGS dst, stride, stride3, lines4
+@@ -423,7 +421,7 @@ cglobal dc_128_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
+ 
+ 
+ INIT_XMM sse2
+-cglobal dc_predictor_32x32, 4, 5, 5, dst, stride, above, left, goffset
++cglobal dc_predictor_32x32, 4, 5, 5, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -465,7 +463,7 @@ cglobal dc_predictor_32x32, 4, 5, 5, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal dc_top_predictor_32x32, 4, 5, 5, dst, stride, above, left, goffset
++cglobal dc_top_predictor_32x32, 4, 5, 5, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -501,7 +499,7 @@ cglobal dc_top_predictor_32x32, 4, 5, 5, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal dc_left_predictor_32x32, 4, 5, 5, dst, stride, above, left, goffset
++cglobal dc_left_predictor_32x32, 4, 5, 5, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -537,7 +535,7 @@ cglobal dc_left_predictor_32x32, 4, 5, 5, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal dc_128_predictor_32x32, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_128_predictor_32x32, 4, 5, 3, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   DEFINE_ARGS dst, stride, stride3, lines4
+@@ -560,7 +558,7 @@ cglobal dc_128_predictor_32x32, 4, 5, 3, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal v_predictor_4x4, 3, 3, 1, dst, stride, above
++cglobal v_predictor_4x4, 3, 3, 1, "p", dst, "p-", stride, "p", above
+   movd                  m0, [aboveq]
+   movd      [dstq        ], m0
+   movd      [dstq+strideq], m0
+@@ -570,7 +568,7 @@ cglobal v_predictor_4x4, 3, 3, 1, dst, stride, above
+   RET
+ 
+ INIT_XMM sse2
+-cglobal v_predictor_8x8, 3, 3, 1, dst, stride, above
++cglobal v_predictor_8x8, 3, 3, 1, "p", dst, "p-", stride, "p", above
+   movq                  m0, [aboveq]
+   DEFINE_ARGS dst, stride, stride3
+   lea             stride3q, [strideq*3]
+@@ -586,7 +584,7 @@ cglobal v_predictor_8x8, 3, 3, 1, dst, stride, above
+   RET
+ 
+ INIT_XMM sse2
+-cglobal v_predictor_16x16, 3, 4, 1, dst, stride, above
++cglobal v_predictor_16x16, 3, 4, 1, "p", dst, "p-", stride, "p", above
+   mova                  m0, [aboveq]
+   DEFINE_ARGS dst, stride, stride3, nlines4
+   lea             stride3q, [strideq*3]
+@@ -602,7 +600,7 @@ cglobal v_predictor_16x16, 3, 4, 1, dst, stride, above
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal v_predictor_32x32, 3, 4, 2, dst, stride, above
++cglobal v_predictor_32x32, 3, 4, 2, "p", dst, "p-", stride, "p", above
+   mova                  m0, [aboveq]
+   mova                  m1, [aboveq+16]
+   DEFINE_ARGS dst, stride, stride3, nlines4
+@@ -623,8 +621,7 @@ cglobal v_predictor_32x32, 3, 4, 2, dst, stride, above
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal h_predictor_4x4, 2, 4, 4, dst, stride, line, left
+-  movifnidn          leftq, leftmp
++cglobal h_predictor_4x4, 4, 4, 4, "p", dst, "p-", stride, "p*", line, "p", left
+   movd                  m0, [leftq]
+   punpcklbw             m0, m0
+   punpcklbw             m0, m0
+@@ -639,8 +636,7 @@ cglobal h_predictor_4x4, 2, 4, 4, dst, stride, line, left
+   RET
+ 
+ INIT_XMM sse2
+-cglobal h_predictor_8x8, 2, 5, 3, dst, stride, line, left
+-  movifnidn          leftq, leftmp
++cglobal h_predictor_8x8, 4, 5, 3, "p", dst, "p-", stride, "p*", line, "p", left
+   mov                lineq, -2
+   DEFINE_ARGS  dst, stride, line, left, stride3
+   lea             stride3q, [strideq*3]
+@@ -662,10 +658,8 @@ cglobal h_predictor_8x8, 2, 5, 3, dst, stride, line, left
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal h_predictor_16x16, 2, 5, 3, dst, stride, line, left
+-  movifnidn          leftq, leftmp
++cglobal h_predictor_16x16, 4, 5, 3, "p", dst, "p-",  stride, "p*", line, "p", left, stride3
+   mov                lineq, -4
+-  DEFINE_ARGS dst, stride, line, left, stride3
+   lea             stride3q, [strideq*3]
+ .loop:
+   movd                  m0, [leftq]
+@@ -686,10 +680,8 @@ cglobal h_predictor_16x16, 2, 5, 3, dst, stride, line, left
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal h_predictor_32x32, 2, 5, 3, dst, stride, line, left
+-  movifnidn              leftq, leftmp
++cglobal h_predictor_32x32, 4, 5, 3, "p", dst, "p-", stride, "p*", line, "p", left, stride3
+   mov                    lineq, -8
+-  DEFINE_ARGS dst, stride, line, left, stride3
+   lea                 stride3q, [strideq*3]
+ .loop:
+   movd                      m0, [leftq]
+@@ -714,7 +706,7 @@ cglobal h_predictor_32x32, 2, 5, 3, dst, stride, line, left
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal tm_predictor_4x4, 4, 4, 5, dst, stride, above, left
++cglobal tm_predictor_4x4, 4, 4, 5, "p", dst, "p-", stride, "p", above, "p", left
+   pxor                  m1, m1
+   movq                  m0, [aboveq-1]; [63:0] tl t1 t2 t3 t4 x x x
+   punpcklbw             m0, m1
+@@ -743,7 +735,7 @@ cglobal tm_predictor_4x4, 4, 4, 5, dst, stride, above, left
+   RET
+ 
+ INIT_XMM sse2
+-cglobal tm_predictor_8x8, 4, 4, 5, dst, stride, above, left
++cglobal tm_predictor_8x8, 4, 4, 5, "p", dst, "p-", stride, "p", above, "p", left
+   pxor                  m1, m1
+   movd                  m2, [aboveq-1]
+   movq                  m0, [aboveq]
+@@ -773,7 +765,7 @@ cglobal tm_predictor_8x8, 4, 4, 5, dst, stride, above, left
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal tm_predictor_16x16, 4, 5, 8, dst, stride, above, left
++cglobal tm_predictor_16x16, 4, 5, 8, "p", dst, "p-", stride, "p", above, "p", left
+   pxor                  m1, m1
+   mova                  m2, [aboveq-16];
+   mova                  m0, [aboveq]   ; t1 t2 ... t16 [byte]
+@@ -811,7 +803,7 @@ cglobal tm_predictor_16x16, 4, 5, 8, dst, stride, above, left
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal tm_predictor_32x32, 4, 4, 8, dst, stride, above, left
++cglobal tm_predictor_32x32, 4, 4, 8, "p", dst, "p-", stride, "p", above, "p", left
+   pxor                  m1, m1
+   movd                  m2, [aboveq-1]
+   mova                  m0, [aboveq]
+diff --git a/vpx_dsp/x86/intrapred_ssse3.asm b/vpx_dsp/x86/intrapred_ssse3.asm
+index 5e0139fa8..ebcda1a27 100644
+--- a/vpx_dsp/x86/intrapred_ssse3.asm
++++ b/vpx_dsp/x86/intrapred_ssse3.asm
+@@ -31,7 +31,7 @@ sh_bfedcba9876543210: db 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
+ SECTION .text
+ 
+ INIT_XMM ssse3
+-cglobal d45_predictor_16x16, 3, 6, 4, dst, stride, above, dst8, line, goffset
++cglobal d45_predictor_16x16, 3, 6, 4, "p", dst, "p-", stride, "p", above, dst8, line, goffset
+   GET_GOT     goffsetq
+ 
+   mova                   m0, [aboveq]
+@@ -82,7 +82,7 @@ cglobal d45_predictor_16x16, 3, 6, 4, dst, stride, above, dst8, line, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d45_predictor_32x32, 3, 6, 7, dst, stride, above, dst16, line, goffset
++cglobal d45_predictor_32x32, 3, 6, 7, "p", dst, "p-", stride, "p", above, dst16, line, goffset
+   GET_GOT     goffsetq
+ 
+   mova                   m0, [aboveq]
+@@ -177,7 +177,7 @@ cglobal d45_predictor_32x32, 3, 6, 7, dst, stride, above, dst16, line, goffset
+ %endmacro
+ 
+ INIT_XMM ssse3
+-cglobal d63_predictor_4x4, 3, 4, 5, dst, stride, above, goffset
++cglobal d63_predictor_4x4, 3, 4, 5, "p", dst, "p-", stride, "p", above, goffset
+   GET_GOT     goffsetq
+ 
+   movq                m3, [aboveq]
+@@ -199,7 +199,7 @@ cglobal d63_predictor_4x4, 3, 4, 5, dst, stride, above, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d63_predictor_8x8, 3, 4, 5, dst, stride, above, goffset
++cglobal d63_predictor_8x8, 3, 4, 5, "p", dst, "p-", stride, "p", above, goffset
+   GET_GOT     goffsetq
+ 
+   movq                m3, [aboveq]
+@@ -235,7 +235,7 @@ cglobal d63_predictor_8x8, 3, 4, 5, dst, stride, above, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d63_predictor_16x16, 3, 5, 5, dst, stride, above, line, goffset
++cglobal d63_predictor_16x16, 3, 5, 5, "p", dst, "p-", stride, "p", above, line, goffset
+   GET_GOT     goffsetq
+ 
+   mova                m0, [aboveq]
+@@ -265,7 +265,7 @@ cglobal d63_predictor_16x16, 3, 5, 5, dst, stride, above, line, goffset
+   REP_RET
+ 
+ INIT_XMM ssse3
+-cglobal d63_predictor_32x32, 3, 5, 8, dst, stride, above, line, goffset
++cglobal d63_predictor_32x32, 3, 5, 8, "p", dst, "p-", stride, "p", above, line, goffset
+   GET_GOT     goffsetq
+ 
+   mova                   m0, [aboveq]
+@@ -310,7 +310,7 @@ cglobal d63_predictor_32x32, 3, 5, 8, dst, stride, above, line, goffset
+   REP_RET
+ 
+ INIT_XMM ssse3
+-cglobal d153_predictor_4x4, 4, 5, 4, dst, stride, above, left, goffset
++cglobal d153_predictor_4x4, 4, 5, 4, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+   movd                m0, [leftq]               ; l1, l2, l3, l4
+   movd                m1, [aboveq-1]            ; tl, t1, t2, t3
+@@ -342,7 +342,7 @@ cglobal d153_predictor_4x4, 4, 5, 4, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d153_predictor_8x8, 4, 5, 8, dst, stride, above, left, goffset
++cglobal d153_predictor_8x8, 4, 5, 8, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+   movq                m0, [leftq]                     ; [0- 7] l1-8 [byte]
+   movhps              m0, [aboveq-1]                  ; [8-15] tl, t1-7 [byte]
+@@ -391,7 +391,7 @@ cglobal d153_predictor_8x8, 4, 5, 8, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d153_predictor_16x16, 4, 5, 8, dst, stride, above, left, goffset
++cglobal d153_predictor_16x16, 4, 5, 8, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+   mova                m0, [leftq]
+   movu                m7, [aboveq-1]
+@@ -470,7 +470,7 @@ cglobal d153_predictor_16x16, 4, 5, 8, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d153_predictor_32x32, 4, 5, 8, dst, stride, above, left, goffset
++cglobal d153_predictor_32x32, 4, 5, 8, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+   mova                  m0, [leftq]
+   movu                  m7, [aboveq-1]
+@@ -647,7 +647,7 @@ cglobal d153_predictor_32x32, 4, 5, 8, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d207_predictor_8x8, 4, 5, 4, dst, stride, stride3, left, goffset
++cglobal d207_predictor_8x8, 4, 5, 4, "p", dst, "p-", stride, "p*", stride3, "p", left, goffset
+   GET_GOT     goffsetq
+   movq                m3, [leftq]            ; abcdefgh [byte]
+   lea           stride3q, [strideq*3]
+@@ -681,7 +681,7 @@ cglobal d207_predictor_8x8, 4, 5, 4, dst, stride, stride3, left, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d207_predictor_16x16, 4, 5, 5, dst, stride, stride3, left, goffset
++cglobal d207_predictor_16x16, 4, 5, 5, "p", dst, "p-", stride, "p*", stride3, "p", left, goffset
+   GET_GOT     goffsetq
+   lea           stride3q, [strideq*3]
+   mova                m0, [leftq]            ; abcdefghijklmnop [byte]
+@@ -728,7 +728,7 @@ cglobal d207_predictor_16x16, 4, 5, 5, dst, stride, stride3, left, goffset
+   REP_RET
+ 
+ INIT_XMM ssse3
+-cglobal d207_predictor_32x32, 4, 5, 8, dst, stride, stride3, left, goffset
++cglobal d207_predictor_32x32, 4, 5, 8, "p", dst, "p-", stride, "p*", stride3, "p", left, goffset
+   GET_GOT     goffsetq
+   lea           stride3q, [strideq*3]
+   mova                m1, [leftq]              ;  0-15 [byte]
+diff --git a/vpx_dsp/x86/inv_txfm_ssse3_x86_64.asm b/vpx_dsp/x86/inv_txfm_ssse3_x86_64.asm
+index 20baf820f..04db77450 100644
+--- a/vpx_dsp/x86/inv_txfm_ssse3_x86_64.asm
++++ b/vpx_dsp/x86/inv_txfm_ssse3_x86_64.asm
+@@ -214,7 +214,7 @@ SECTION .text
+ 
+ INIT_XMM ssse3
+ ; full inverse 8x8 2D-DCT transform
+-cglobal idct8x8_64_add, 3, 5, 13, input, output, stride
++cglobal idct8x8_64_add, 3, 5, 13, "p", input, "p", output, "d-", stride
+   mova     m8, [pd_8192]
+   mova    m11, [pw_16]
+   mova    m12, [pw_11585x2]
+@@ -264,7 +264,7 @@ cglobal idct8x8_64_add, 3, 5, 13, input, output, stride
+   RET
+ 
+ ; inverse 8x8 2D-DCT transform with only first 10 coeffs non-zero
+-cglobal idct8x8_12_add, 3, 5, 13, input, output, stride
++cglobal idct8x8_12_add, 3, 5, 13, "p", input, "p", output, "d-", stride
+   mova       m8, [pd_8192]
+   mova      m11, [pw_16]
+   mova      m12, [pw_11585x2]
+@@ -784,7 +784,7 @@ cglobal idct8x8_12_add, 3, 5, 13, input, output, stride
+ %define stp r8
+ 
+ INIT_XMM ssse3
+-cglobal idct32x32_34_add, 3, 11, 16, i32x32_size, input, output, stride
++cglobal idct32x32_34_add, 3, 11, 16, i32x32_size, "p", input, "p", output, "d-", stride
+   mova            m8, [pd_8192]
+   lea            stp, [rsp + pass_one_start]
+ 
+@@ -1212,7 +1212,7 @@ idct32x32_34_transpose_2:
+ %endmacro
+ 
+ INIT_XMM ssse3
+-cglobal idct32x32_135_add, 3, 11, 16, i32x32_size, input, output, stride
++cglobal idct32x32_135_add, 3, 11, 16, i32x32_size, "p", input, "p", output, "d-", stride
+   mova            m8, [pd_8192]
+   mov             r6, 2
+   lea            stp, [rsp + pass_one_start]
+@@ -1676,7 +1676,7 @@ idct32x32_135_transpose_2:
+ %endmacro
+ 
+ INIT_XMM ssse3
+-cglobal idct32x32_1024_add, 3, 11, 16, i32x32_size, input, output, stride
++cglobal idct32x32_1024_add, 3, 11, 16, i32x32_size, "p", input, "p", output, "d-", stride
+   mova            m8, [pd_8192]
+   mov             r6, 4
+   lea            stp, [rsp + pass_one_start]
+diff --git a/vpx_dsp/x86/inv_wht_sse2.asm b/vpx_dsp/x86/inv_wht_sse2.asm
+index fbbcd76bd..dc9eaa7e3 100644
+--- a/vpx_dsp/x86/inv_wht_sse2.asm
++++ b/vpx_dsp/x86/inv_wht_sse2.asm
+@@ -81,7 +81,7 @@ SECTION .text
+ %endmacro
+ 
+ INIT_XMM sse2
+-cglobal iwht4x4_16_add, 3, 3, 7, input, output, stride
++cglobal iwht4x4_16_add, 3, 3, 7, "p", input, "p", output, "d-", stride
+ %if CONFIG_VP9_HIGHBITDEPTH
+   mova            m0,        [inputq +  0]
+   packssdw        m0,        [inputq + 16]
+diff --git a/vpx_dsp/x86/quantize_avx_x86_64.asm b/vpx_dsp/x86/quantize_avx_x86_64.asm
+index 01c41291b..06026cc51 100644
+--- a/vpx_dsp/x86/quantize_avx_x86_64.asm
++++ b/vpx_dsp/x86/quantize_avx_x86_64.asm
+@@ -13,14 +13,15 @@
+ SECTION .text
+ 
+ %macro QUANTIZE_FN 2
+-cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+-                                shift, qcoeff, dqcoeff, dequant, \
+-                                eob, scan, iscan
++cglobal quantize_%1, 0, %2, 15, "p", coeff, "p-", ncoeff, "d", skip, \
++                                "p", zbin, "p", round, "p", quant, "p", shift, \
++                                "p", qcoeff, "p", dqcoeff, "p", dequant, \
++                                "p", eob, "p", scan, "p", iscan
+ 
+   vzeroupper
+ 
+   ; If we can skip this block, then just zero the output
+-  cmp                         skipmp, 0
++  cmp                         skipmd, 0
+   jne .blank
+ 
+ %ifnidn %1, b_32x32
+@@ -36,8 +37,7 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ 
+ .single:
+ 
+-  movifnidn                   coeffq, coeffmp
+-  movifnidn                    zbinq, zbinmp
++  LOAD_ARG coeff, zbin
+   mova                            m0, [zbinq]              ; m0 = zbin
+ 
+   ; Get DC and first 15 AC coeffs - in this special case, that is all.
+@@ -52,9 +52,10 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+   mova                           m10, [coeffq+16]          ; m10 = c[i]
+ %endif
+ 
+-  mov                             r0, eobmp                ; Output pointer
+-  mov                             r1, qcoeffmp             ; Output pointer
+-  mov                             r2, dqcoeffmp            ; Output pointer
++  ASSIGN_ARG eob, 0                                        ; Output pointer
++  ASSIGN_ARG qcoeff, 1                                     ; Output pointer
++  ASSIGN_ARG dqcoeff, 2                                    ; Output pointer
++  LOAD_ARG eob, qcoeff, dqcoeff
+ 
+   pxor                            m5, m5                   ; m5 = dedicated zero
+ 
+@@ -90,18 +91,15 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ .single_nonzero:
+ 
+   ; Actual quantization of size 16 block - setup pointers, rounders, etc.
+-  movifnidn                       r4, roundmp
+-  movifnidn                       r5, quantmp
+-  mov                             r3, dequantmp
+-  mov                             r6, shiftmp
++  ASSIGN_ARG dequant, 3
++  LOAD_ARG round, quant, dequant, shift
+   mova                            m1, [r4]              ; m1 = round
+   mova                            m2, [r5]              ; m2 = quant
+   mova                            m3, [r3]              ; m3 = dequant
+   mova                            m4, [r6]              ; m4 = shift
+ 
+-  mov                             r3, iscanmp
+-
+-  DEFINE_ARGS eob, qcoeff, dqcoeff, iscan
++  ASSIGN_ARG iscan, 3
++  LOAD_ARG iscan
+ 
+   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ 
+@@ -191,16 +189,14 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ 
+ %endif ; %ifnidn %1, b_32x32
+ 
+-DEFINE_ARGS coeff, ncoeff, skip, zbin, round, quant, shift, \
+-            qcoeff, dqcoeff, dequant, eob, scan, iscan
++DEFINE_ARGS "p", coeff, "p-", ncoeff, "d", skip, \
++            "p", zbin, "p", round, "p", quant, "p", shift, \
++            "p", qcoeff, "p", dqcoeff, "p", dequant, \
++            "p", eob, "p", scan, "p", iscan
+ 
+   ; Actual quantization loop - setup pointers, rounders, etc.
+-  movifnidn                   coeffq, coeffmp
+-  movifnidn                  ncoeffq, ncoeffmp
+-  mov                             r2, dequantmp
+-  movifnidn                    zbinq, zbinmp
+-  movifnidn                   roundq, roundmp
+-  movifnidn                   quantq, quantmp
++  ASSIGN_ARG dequant, 2
++  LOAD_ARG coeff, ncoeff, dequant, zbin, round, quant
+   mova                            m0, [zbinq]              ; m0 = zbin
+   mova                            m1, [roundq]             ; m1 = round
+   mova                            m2, [quantq]             ; m2 = quant
+@@ -214,11 +210,13 @@ DEFINE_ARGS coeff, ncoeff, skip, zbin, round, quant, shift, \
+ %endif
+   paddw                           m0, m4                   ; m0 = m0 + 1
+ 
+-  mov                             r2, shiftmp
+-  mov                             r3, qcoeffmp
++  ASSIGN_ARG shift, 2
++  ASSIGN_ARG qcoeff, 3
++  ASSIGN_ARG dqcoeff, 4
++  ASSIGN_ARG iscan, 5
++  LOAD_ARG shift, qcoeff
+   mova                            m4, [r2]                 ; m4 = shift
+-  mov                             r4, dqcoeffmp
+-  mov                             r5, iscanmp
++  LOAD_ARG dqcoeff, iscan
+ %ifidn %1, b_32x32
+   psllw                           m4, 1
+ %endif
+@@ -394,8 +392,9 @@ DEFINE_ARGS coeff, ncoeff, skip, zbin, round, quant, shift, \
+   add                        ncoeffq, mmsize
+   jnz .ac_only_loop
+ 
++  ASSIGN_ARG eob, 2
+   ; Horizontally accumulate/max eobs and write into [eob] memory pointer
+-  mov                             r2, eobmp
++  LOAD_ARG eob
+   pshufd                          m7, m8, 0xe
+   pmaxsw                          m8, m7
+   pshuflw                         m7, m8, 0xe
+@@ -482,7 +481,7 @@ DEFINE_ARGS coeff, ncoeff, skip, zbin, round, quant, shift, \
+   jnz .ac_only_loop
+ 
+   ; Horizontally accumulate/max eobs and write into [eob] memory pointer
+-  mov                             r2, eobmp
++  LOAD_ARG eob
+   pshufd                          m7, m8, 0xe
+   pmaxsw                          m8, m7
+   pshuflw                         m7, m8, 0xe
+@@ -497,15 +496,15 @@ DEFINE_ARGS coeff, ncoeff, skip, zbin, round, quant, shift, \
+   ; Skip-block, i.e. just write all zeroes
+ .blank:
+ 
+-DEFINE_ARGS coeff, ncoeff, skip, zbin, round, quant, shift, \
+-            qcoeff, dqcoeff, dequant, eob, scan, iscan
+-
+-  mov                             r0, dqcoeffmp
+-  movifnidn                  ncoeffq, ncoeffmp
+-  mov                             r2, qcoeffmp
+-  mov                             r3, eobmp
++DEFINE_ARGS "p", coeff, "p-", ncoeff, "d", skip, \
++            "p", zbin, "p", round, "p", quant, "p", shift, \
++            "p", qcoeff, "p", dqcoeff, "p", dequant, \
++            "p", eob, "p", scan, "p", iscan
+ 
+-DEFINE_ARGS dqcoeff, ncoeff, qcoeff, eob
++  ASSIGN_ARG dqcoeff, 0
++  ASSIGN_ARG qcoeff, 2
++  ASSIGN_ARG eob, 3
++  LOAD_ARG dqcoeff, ncoeff, qcoeff, eob
+ 
+ %if CONFIG_VP9_HIGHBITDEPTH
+   lea                       dqcoeffq, [dqcoeffq+ncoeffq*4]
+diff --git a/vpx_dsp/x86/quantize_ssse3_x86_64.asm b/vpx_dsp/x86/quantize_ssse3_x86_64.asm
+index b2319c2bd..9f7353146 100644
+--- a/vpx_dsp/x86/quantize_ssse3_x86_64.asm
++++ b/vpx_dsp/x86/quantize_ssse3_x86_64.asm
+@@ -17,19 +17,16 @@ SECTION .text
+ 
+ ; TODO(yunqingwang)fix quantize_b code for skip=1 case.
+ %macro QUANTIZE_FN 2
+-cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+-                                shift, qcoeff, dqcoeff, dequant, \
+-                                eob, scan, iscan
++cglobal quantize_%1, 0, %2, 15, "p", coeff, "p-", ncoeff, "d", skip, \
++                                "p", zbin, "p", round, "p", quant, "p", shift, \
++                                "p", qcoeff, "p", dqcoeff, "p", dequant, \
++                                "p", eob, "p", scan, "p", iscan
+   cmp                    dword skipm, 0
+   jne .blank
+ 
+   ; actual quantize loop - setup pointers, rounders, etc.
+-  movifnidn                   coeffq, coeffmp
+-  movifnidn                  ncoeffq, ncoeffmp
+-  mov                             r2, dequantmp
+-  movifnidn                    zbinq, zbinmp
+-  movifnidn                   roundq, roundmp
+-  movifnidn                   quantq, quantmp
++  ASSIGN_ARG dequant, 2
++  LOAD_ARG coeff, ncoeff, dequant, zbin, round, quant
+   mova                            m0, [zbinq]              ; m0 = zbin
+   mova                            m1, [roundq]             ; m1 = round
+   mova                            m2, [quantq]             ; m2 = quant
+@@ -43,11 +40,13 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ %endif
+   mova                            m3, [r2q]                ; m3 = dequant
+   psubw                           m0, [pw_1]
+-  mov                             r2, shiftmp
+-  mov                             r3, qcoeffmp
++  ASSIGN_ARG shift, 2
++  ASSIGN_ARG qcoeff, 3
++  ASSIGN_ARG dqcoeff, 4
++  ASSIGN_ARG iscan, 5
++  LOAD_ARG shift, qcoeff
+   mova                            m4, [r2]                 ; m4 = shift
+-  mov                             r4, dqcoeffmp
+-  mov                             r5, iscanmp
++  LOAD_ARG dqcoeff, iscan
+ %ifidn %1, b_32x32
+   psllw                           m4, 1
+ %endif
+@@ -292,7 +291,8 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ 
+ .accumulate_eob:
+   ; horizontally accumulate/max eobs and write into [eob] memory pointer
+-  mov                             r2, eobmp
++  ASSIGN_ARG eob, 2
++  LOAD_ARG eob
+   pshufd                          m7, m8, 0xe
+   pmaxsw                          m8, m7
+   pshuflw                         m7, m8, 0xe
+@@ -305,11 +305,10 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, zbin, round, quant, \
+ 
+   ; skip-block, i.e. just write all zeroes
+ .blank:
+-  mov                             r0, dqcoeffmp
+-  movifnidn                  ncoeffq, ncoeffmp
+-  mov                             r2, qcoeffmp
+-  mov                             r3, eobmp
+-  DEFINE_ARGS dqcoeff, ncoeff, qcoeff, eob
++  ASSIGN_ARG dqcoeff, 0
++  ASSIGN_ARG qcoeff, 2
++  ASSIGN_ARG eob, 3
++  LOAD_ARG dqcoeff, ncoeff, qcoeff, eob
+ %if CONFIG_VP9_HIGHBITDEPTH
+   lea                       dqcoeffq, [dqcoeffq+ncoeffq*4]
+   lea                        qcoeffq, [ qcoeffq+ncoeffq*4]
+diff --git a/vpx_dsp/x86/sad4d_sse2.asm b/vpx_dsp/x86/sad4d_sse2.asm
+index 3f6e55ce9..16a2341af 100644
+--- a/vpx_dsp/x86/sad4d_sse2.asm
++++ b/vpx_dsp/x86/sad4d_sse2.asm
+@@ -181,18 +181,18 @@ SECTION .text
+ ; where NxN = 64x64, 32x32, 16x16, 16x8, 8x16, 8x8, 8x4, 4x8 and 4x4
+ %macro SADNXN4D 2
+ %if UNIX64
+-cglobal sad%1x%2x4d, 5, 8, 8, src, src_stride, ref1, ref_stride, \
+-                              res, ref2, ref3, ref4
++cglobal sad%1x%2x4d, 5, 8, 8, "p", src, "d-", src_stride, \
++                              "p", ref1, "d-", ref_stride, \
++                              "p", res, ref2, ref3, ref4
+ %else
+-cglobal sad%1x%2x4d, 4, 7, 8, src, src_stride, ref1, ref_stride, \
+-                              ref2, ref3, ref4
++cglobal sad%1x%2x4d, 4, 7, 8, "p", src, "d-", src_stride, \
++                              "p", ref1, "d-", ref_stride, \
++                              "p", ref2, ref3, ref4
+ %endif
+-  movsxdifnidn src_strideq, src_strided
+-  movsxdifnidn ref_strideq, ref_strided
+-  mov                ref2q, [ref1q+gprsize*1]
+-  mov                ref3q, [ref1q+gprsize*2]
+-  mov                ref4q, [ref1q+gprsize*3]
+-  mov                ref1q, [ref1q+gprsize*0]
++  mov                ref2p, [ref1q+ptrsize*1]
++  mov                ref3p, [ref1q+ptrsize*2]
++  mov                ref4p, [ref1q+ptrsize*3]
++  mov                ref1p, [ref1q+ptrsize*0]
+ 
+   PROCESS_%1x2x4 1, 0, 0, src_strideq, ref_strideq, 1
+ %rep (%2-4)/2
+@@ -209,12 +209,12 @@ cglobal sad%1x%2x4d, 4, 7, 8, src, src_stride, ref1, ref_stride, \
+   mova                  m7, m6
+   punpcklqdq            m4, m6
+   punpckhqdq            m5, m7
+-  movifnidn             r4, r4mp
++  LOAD_ARG 4
+   paddd                 m4, m5
+   movu                [r4], m4
+   RET
+ %else
+-  movifnidn             r4, r4mp
++  LOAD_ARG 4
+   pshufd            m6, m6, 0x08
+   pshufd            m7, m7, 0x08
+   movq              [r4+0], m6
+diff --git a/vpx_dsp/x86/sad_sse2.asm b/vpx_dsp/x86/sad_sse2.asm
+index 1ec906c23..de03423bd 100644
+--- a/vpx_dsp/x86/sad_sse2.asm
++++ b/vpx_dsp/x86/sad_sse2.asm
+@@ -15,19 +15,22 @@ SECTION .text
+ %macro SAD_FN 4
+ %if %4 == 0
+ %if %3 == 5
+-cglobal sad%1x%2, 4, %3, 5, src, src_stride, ref, ref_stride, n_rows
++cglobal sad%1x%2, 4, %3, 5, "p", src, "d-", src_stride, \
++                            "p", ref, "d-", ref_stride, n_rows
+ %else ; %3 == 7
+-cglobal sad%1x%2, 4, %3, 6, src, src_stride, ref, ref_stride, \
++cglobal sad%1x%2, 4, %3, 6, "p", src, "d-", src_stride, \
++                            "p", ref, "d-", ref_stride, \
+                             src_stride3, ref_stride3, n_rows
+ %endif ; %3 == 5/7
+ %else ; avg
+ %if %3 == 5
+-cglobal sad%1x%2_avg, 5, 1 + %3, 5, src, src_stride, ref, ref_stride, \
+-                                    second_pred, n_rows
++cglobal sad%1x%2_avg, 5, 1 + %3, 5, "p", src, "d-", src_stride, \
++                                    "p", ref, "d-", ref_stride, \
++                                    "p", second_pred, n_rows
+ %else ; %3 == 7
+-cglobal sad%1x%2_avg, 5, ARCH_X86_64 + %3, 6, src, src_stride, \
+-                                              ref, ref_stride, \
+-                                              second_pred, \
++cglobal sad%1x%2_avg, 5, ARCH_X86_64 + %3, 6, "p", src, "d-", src_stride, \
++                                              "p", ref, "d-", ref_stride, \
++                                              "p", second_pred, \
+                                               src_stride3, ref_stride3
+ %if ARCH_X86_64
+ %define n_rowsd r7d
+@@ -36,8 +39,6 @@ cglobal sad%1x%2_avg, 5, ARCH_X86_64 + %3, 6, src, src_stride, \
+ %endif ; x86-32/64
+ %endif ; %3 == 5/7
+ %endif ; avg/sad
+-  movsxdifnidn src_strideq, src_strided
+-  movsxdifnidn ref_strideq, ref_strided
+ %if %3 == 7
+   lea         src_stride3q, [src_strideq*3]
+   lea         ref_stride3q, [ref_strideq*3]
+diff --git a/vpx_dsp/x86/subpel_variance_sse2.asm b/vpx_dsp/x86/subpel_variance_sse2.asm
+index cee4468c1..e5a69b998 100644
+--- a/vpx_dsp/x86/subpel_variance_sse2.asm
++++ b/vpx_dsp/x86/subpel_variance_sse2.asm
+@@ -73,7 +73,7 @@ SECTION .text
+   movhlps              m4, m6
+   paddd                m7, m3
+   paddd                m6, m4
+-  mov                  r1, ssem         ; r1 = unsigned int *sse
++  mov                 r1p, ssemp        ; r1 = unsigned int *sse
+   pshufd               m4, m6, 0x1
+   movd               [r1], m7           ; store sse
+   paddd                m6, m4
+@@ -84,7 +84,7 @@ SECTION .text
+   paddw                m6, m4
+   paddd                m7, m3
+   pcmpgtw              m5, m6           ; mask for 0 > x
+-  mov                  r1, ssem         ; r1 = unsigned int *sse
++  mov                 r1p, ssemp        ; r1 = unsigned int *sse
+   punpcklwd            m6, m5           ; sign-extend m6 word->dword
+   movd               [r1], m7           ; store sse
+   pshuflw              m4, m6, 0xe
+@@ -116,25 +116,32 @@ SECTION .text
+ 
+ %ifdef PIC    ; 64bit PIC
+   %if %2 == 1 ; avg
+-    cglobal sub_pixel_avg_variance%1xh, 9, 10, 13, src, src_stride, \
+-                                      x_offset, y_offset, \
+-                                      dst, dst_stride, \
+-                                      sec, sec_stride, height, sse
++    cglobal sub_pixel_avg_variance%1xh, 9, 10, 13, \
++                                      "p", src, "p-", src_stride, \
++                                      "d", x_offset, "d", y_offset, \
++                                      "p", dst, "p-", dst_stride, \
++                                      "p", sec, "p-", sec_stride, \
++                                      "d", height, "p", sse
+     %define sec_str sec_strideq
+   %else
+-    cglobal sub_pixel_variance%1xh, 7, 8, 13, src, src_stride, x_offset, \
+-                                  y_offset, dst, dst_stride, height, sse
++    cglobal sub_pixel_variance%1xh, 7, 8, 13, \
++                                  "p", src, "p-", src_stride, \
++                                  "d", x_offset, "d", y_offset, \
++                                  "p", dst, "p-", dst_stride, \
++                                  "d", height, "p", sse
+   %endif
+   %define block_height heightd
+   %define bilin_filter sseq
+ %else
+   %if ARCH_X86=1 && CONFIG_PIC=1
+     %if %2 == 1 ; avg
+-      cglobal sub_pixel_avg_variance%1xh, 7, 7, 13, src, src_stride, \
+-                                  x_offset, y_offset, \
+-                                  dst, dst_stride, \
+-                                  sec, sec_stride, \
+-                                  height, sse, g_bilin_filter, g_pw_8
++      cglobal sub_pixel_avg_variance%1xh, 7, 7, 13, \
++                                      "p", src, "p-", src_stride, \
++                                      "d", x_offset, "d", y_offset, \
++                                      "p", dst, "p-", dst_stride, \
++                                      "p", sec, "p-", sec_stride, \
++                                      "d", height, "p", sse, \
++                                      g_bilin_filter, g_pw_8
+       %define block_height dword heightm
+       %define sec_str sec_stridemp
+ 
+@@ -152,9 +159,12 @@ SECTION .text
+ 
+       LOAD_IF_USED 0, 1         ; load eax, ecx back
+     %else
+-      cglobal sub_pixel_variance%1xh, 7, 7, 13, src, src_stride, x_offset, \
+-                                y_offset, dst, dst_stride, height, sse, \
+-                                g_bilin_filter, g_pw_8
++      cglobal sub_pixel_variance%1xh, 7, 7, 13, \
++                                  "p", src, "p-", src_stride, \
++                                  "d", x_offset, "d", y_offset, \
++                                  "p", dst, "p-", dst_stride, \
++                                  "d", height, "p", sse, \
++                                  g_bilin_filter, g_pw_8
+       %define block_height heightd
+ 
+       ;Store bilin_filter and pw_8 location in stack
+@@ -174,11 +184,12 @@ SECTION .text
+   %else
+     %if %2 == 1 ; avg
+       cglobal sub_pixel_avg_variance%1xh, 7 + 2 * ARCH_X86_64, \
+-                        7 + 2 * ARCH_X86_64, 13, src, src_stride, \
+-                                             x_offset, y_offset, \
+-                                             dst, dst_stride, \
+-                                             sec, sec_stride, \
+-                                             height, sse
++                        7 + 2 * ARCH_X86_64, 13, \
++                                      "p", src, "p-", src_stride, \
++                                      "d", x_offset, "d", y_offset, \
++                                      "p", dst, "p-", dst_stride, \
++                                      "p", sec, "p-", sec_stride, \
++                                      "d", height, "p", sse
+       %if ARCH_X86_64
+       %define block_height heightd
+       %define sec_str sec_strideq
+@@ -187,8 +198,11 @@ SECTION .text
+       %define sec_str sec_stridemp
+       %endif
+     %else
+-      cglobal sub_pixel_variance%1xh, 7, 7, 13, src, src_stride, x_offset, \
+-                              y_offset, dst, dst_stride, height, sse
++      cglobal sub_pixel_variance%1xh, 7, 7, 13, \
++                                  "p", src, "p-", src_stride, \
++                                  "d", x_offset, "d", y_offset, \
++                                  "p", dst, "p-", dst_stride, \
++                                  "d", height, "p", sse
+       %define block_height heightd
+     %endif
+ 
+diff --git a/vpx_dsp/x86/subtract_sse2.asm b/vpx_dsp/x86/subtract_sse2.asm
+index 4273efb85..99c7570bc 100644
+--- a/vpx_dsp/x86/subtract_sse2.asm
++++ b/vpx_dsp/x86/subtract_sse2.asm
+@@ -19,9 +19,8 @@ SECTION .text
+ 
+ INIT_XMM sse2
+ cglobal subtract_block, 7, 7, 8, \
+-                        rows, cols, diff, diff_stride, src, src_stride, \
+-                        pred, pred_stride
+-%define pred_str colsq
++                        "d", rows, "d", cols, "p", diff, "p-", diff_stride, \
++                        "p", src, "p-",src_stride, "p", pred, "p-", pred_stride
+   pxor                  m7, m7         ; dedicated zero register
+   cmp                colsd, 4
+   je .case_4
+@@ -31,7 +30,7 @@ cglobal subtract_block, 7, 7, 8, \
+   je .case_16
+   cmp                colsd, 32
+   je .case_32
+-
++ASSIGN_ARG pred_stride, cols
+ %macro loop16 6
+   mova                  m0, [srcq+%1]
+   mova                  m4, [srcq+%2]
+@@ -55,34 +54,34 @@ cglobal subtract_block, 7, 7, 8, \
+   mova [diffq+mmsize*1+%6], m1
+ %endmacro
+ 
+-  mov             pred_str, pred_stridemp
++  LOAD_ARG pred_stride
+ .loop_64:
+   loop16 0*mmsize, 1*mmsize, 0*mmsize, 1*mmsize, 0*mmsize, 2*mmsize
+   loop16 2*mmsize, 3*mmsize, 2*mmsize, 3*mmsize, 4*mmsize, 6*mmsize
+   lea                diffq, [diffq+diff_strideq*2]
+-  add                predq, pred_str
++  add                predq, pred_strideq
+   add                 srcq, src_strideq
+   dec                rowsd
+   jg .loop_64
+   RET
+ 
+ .case_32:
+-  mov             pred_str, pred_stridemp
++  LOAD_ARG pred_stride
+ .loop_32:
+   loop16 0, mmsize, 0, mmsize, 0, 2*mmsize
+   lea                diffq, [diffq+diff_strideq*2]
+-  add                predq, pred_str
++  add                predq, pred_strideq
+   add                 srcq, src_strideq
+   dec                rowsd
+   jg .loop_32
+   RET
+ 
+ .case_16:
+-  mov             pred_str, pred_stridemp
++  LOAD_ARG pred_stride
+ .loop_16:
+-  loop16 0, src_strideq, 0, pred_str, 0, diff_strideq*2
++  loop16 0, src_strideq, 0, pred_strideq, 0, diff_strideq*2
+   lea                diffq, [diffq+diff_strideq*4]
+-  lea                predq, [predq+pred_str*2]
++  lea                predq, [predq+pred_strideq*2]
+   lea                 srcq, [srcq+src_strideq*2]
+   sub                rowsd, 2
+   jg .loop_16
+@@ -92,7 +91,7 @@ cglobal subtract_block, 7, 7, 8, \
+   movh                  m0, [srcq]
+   movh                  m2, [srcq+src_strideq]
+   movh                  m1, [predq]
+-  movh                  m3, [predq+pred_str]
++  movh                  m3, [predq+pred_strideq]
+   punpcklbw             m0, m7
+   punpcklbw             m1, m7
+   punpcklbw             m2, m7
+@@ -104,24 +103,24 @@ cglobal subtract_block, 7, 7, 8, \
+ %endmacro
+ 
+ .case_8:
+-  mov             pred_str, pred_stridemp
++  LOAD_ARG pred_stride
+ .loop_8:
+   loop_h
+   lea                diffq, [diffq+diff_strideq*4]
+   lea                 srcq, [srcq+src_strideq*2]
+-  lea                predq, [predq+pred_str*2]
++  lea                predq, [predq+pred_strideq*2]
+   sub                rowsd, 2
+   jg .loop_8
+   RET
+ 
+ INIT_MMX
+ .case_4:
+-  mov             pred_str, pred_stridemp
++  LOAD_ARG pred_stride
+ .loop_4:
+   loop_h
+   lea                diffq, [diffq+diff_strideq*4]
+   lea                 srcq, [srcq+src_strideq*2]
+-  lea                predq, [predq+pred_str*2]
++  lea                predq, [predq+pred_strideq*2]
+   sub                rowsd, 2
+   jg .loop_4
+   RET
+diff --git a/vpx_dsp/x86/vpx_convolve_copy_sse2.asm b/vpx_dsp/x86/vpx_convolve_copy_sse2.asm
+index abc027065..3cfed822b 100644
+--- a/vpx_dsp/x86/vpx_convolve_copy_sse2.asm
++++ b/vpx_dsp/x86/vpx_convolve_copy_sse2.asm
+@@ -20,14 +20,14 @@ SECTION .text
+ %endif
+ %ifidn %2, highbd
+ %define pavg pavgw
+-cglobal %2_convolve_%1, 4, 7, 4+AUX_XMM_REGS, src, src_stride, \
+-                                              dst, dst_stride, \
+-                                              fx, fxs, fy, fys, w, h, bd
++cglobal %2_convolve_%1, 4, 7, 4+AUX_XMM_REGS, "p", src, "p-", src_stride, \
++                                 "p", dst, "p-", dst_stride, \
++                                 fx, fxs, fy, fys, w, h, bd
+ %else
+ %define pavg pavgb
+-cglobal convolve_%1, 4, 7, 4+AUX_XMM_REGS, src, src_stride, \
+-                                           dst, dst_stride, \
+-                                           fx, fxs, fy, fys, w, h
++cglobal convolve_%1, 4, 7, 4+AUX_XMM_REGS, "p", src, "p-", src_stride, \
++                              "p", dst, "p-", dst_stride, \
++                              fx, fxs, fy, fys, w, h
+ %endif
+   mov r4d, dword wm
+ %ifidn %2, highbd
+diff --git a/vpx_dsp/x86/vpx_subpixel_8t_ssse3.asm b/vpx_dsp/x86/vpx_subpixel_8t_ssse3.asm
+index d2cb8ea29..9a7eb30de 100644
+--- a/vpx_dsp/x86/vpx_subpixel_8t_ssse3.asm
++++ b/vpx_dsp/x86/vpx_subpixel_8t_ssse3.asm
+@@ -97,7 +97,8 @@ SECTION .text
+ ;-------------------------------------------------------------------------------
+ %macro SUBPIX_HFILTER4 1
+ cglobal filter_block1d4_%1, 6, 6+(ARCH_X86_64*2), 11, LOCAL_VARS_SIZE, \
+-                            src, sstride, dst, dstride, height, filter
++                            "p", src, "p-", sstride, "p", dst, "p-", dstride, \
++                            "d", height, "p", filter
+     mova                m4, [filterq]
+     packsswb            m4, m4
+ %if ARCH_X86_64
+@@ -245,7 +246,8 @@ cglobal filter_block1d4_%1, 6, 6+(ARCH_X86_64*2), 11, LOCAL_VARS_SIZE, \
+ ;-------------------------------------------------------------------------------
+ %macro SUBPIX_HFILTER8 1
+ cglobal filter_block1d8_%1, 6, 6+(ARCH_X86_64*1), 14, LOCAL_VARS_SIZE, \
+-                            src, sstride, dst, dstride, height, filter
++                            "p", src, "p-", sstride, "p", dst, "p-", dstride, \
++                            "d", height, "p", filter
+     mova                 m4, [filterq]
+     SETUP_LOCAL_VARS
+ %if ARCH_X86_64
+@@ -346,7 +348,8 @@ cglobal filter_block1d8_%1, 6, 6+(ARCH_X86_64*1), 14, LOCAL_VARS_SIZE, \
+ ;-------------------------------------------------------------------------------
+ %macro SUBPIX_HFILTER16 1
+ cglobal filter_block1d16_%1, 6, 6+(ARCH_X86_64*0), 14, LOCAL_VARS_SIZE, \
+-                             src, sstride, dst, dstride, height, filter
++                             "p", src, "p-", sstride, "p", dst, "p-", dstride, \
++                             "d", height, "p", filter
+     mova          m4, [filterq]
+     SETUP_LOCAL_VARS
+ .loop:
+@@ -422,7 +425,8 @@ SUBPIX_HFILTER4  h8_avg
+ ;-------------------------------------------------------------------------------
+ %macro SUBPIX_VFILTER 2
+ cglobal filter_block1d%2_%1, 6, 6+(ARCH_X86_64*3), 14, LOCAL_VARS_SIZE, \
+-                             src, sstride, dst, dstride, height, filter
++                             "p", src, "p-", sstride, "p", dst, "p-", dstride, \
++                             "d", height, "p", filter
+     mova          m4, [filterq]
+     SETUP_LOCAL_VARS
+ %if ARCH_X86_64
+@@ -541,7 +545,8 @@ cglobal filter_block1d%2_%1, 6, 6+(ARCH_X86_64*3), 14, LOCAL_VARS_SIZE, \
+ ;-------------------------------------------------------------------------------
+ %macro SUBPIX_VFILTER16 1
+ cglobal filter_block1d16_%1, 6, 6+(ARCH_X86_64*3), 14, LOCAL_VARS_SIZE, \
+-                             src, sstride, dst, dstride, height, filter
++                             "p", src, "p-", sstride, "p", dst, "p-", dstride, \
++                             "d", height, "p", filter
+     mova          m4, [filterq]
+     SETUP_LOCAL_VARS
+ %if ARCH_X86_64
+-- 
+2.16.4
+

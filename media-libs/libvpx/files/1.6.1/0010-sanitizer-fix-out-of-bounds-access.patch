@@ -1,0 +1,31 @@
+From afd8ccf47a595f3398d741b4210d2f448fdaad77 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 9 Sep 2018 22:47:21 +0200
+Subject: [PATCH 10/15] sanitizer: fix out of bounds access
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I40277ffd817fb4db67c6485c062b5d27691cd743
+---
+ vp9/encoder/vp9_rdopt.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/vp9/encoder/vp9_rdopt.c b/vp9/encoder/vp9_rdopt.c
+index 27d4e9d6d..eb6b7c41f 100644
+--- a/vp9/encoder/vp9_rdopt.c
++++ b/vp9/encoder/vp9_rdopt.c
+@@ -3841,7 +3841,8 @@ void vp9_rd_pick_inter_mode_sub8x8(VP9_COMP *cpi, TileDataEnc *tile_data,
+ #if CONFIG_BETTER_HW_COMPATIBILITY
+     // forbid 8X4 and 4X8 partitions if any reference frame is scaled.
+     if (bsize == BLOCK_8X4 || bsize == BLOCK_4X8) {
+-      int ref_scaled = vp9_is_scaled(&cm->frame_refs[ref_frame - 1].sf);
++      int ref_scaled =
++          ref_frame != 0 && vp9_is_scaled(&cm->frame_refs[ref_frame - 1].sf);
+       if (second_ref_frame > INTRA_FRAME)
+         ref_scaled += vp9_is_scaled(&cm->frame_refs[second_ref_frame - 1].sf);
+       if (ref_scaled) continue;
+-- 
+2.16.4
+

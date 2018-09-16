@@ -1,4 +1,4 @@
-commit 240f62f553cfb2546bd965cb4143c8d044900cdd
+commit 77e95425e62db9f45e619576aabe03ea4bfd2e72
 Author: Craig Topper <craig.topper@intel.com>
 Date:   Tue Sep 11 17:57:23 2018 +0000
 
@@ -9,6 +9,8 @@ Date:   Tue Sep 11 17:57:23 2018 +0000
     Fixes ones of the failures from PR38865.
     
     Differential Revision: https://reviews.llvm.org/D51940
+    
+    cherry-picked from a8ffcb61645dc2bf13a4f530e966a384832e6802
 
 diff --git a/llvm/lib/Target/X86/X86FastISel.cpp b/llvm/lib/Target/X86/X86FastISel.cpp
 index dca6c592614..1e3d5e05cfe 100644

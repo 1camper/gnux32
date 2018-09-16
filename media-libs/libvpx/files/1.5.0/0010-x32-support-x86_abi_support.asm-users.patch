@@ -1,0 +1,265 @@
+From e379d6e7ac3f34da44b63134beedab8a6a5c1b97 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Thu, 13 Sep 2018 09:51:29 +0200
+Subject: [PATCH 10/12] x32 support: x86_abi_support.asm users
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: If9b0ceac765b65690687715e101cbff48cc4fade
+---
+ vp8/common/x86/subpixel_mmx.asm                    |  4 ++--
+ vp8/common/x86/subpixel_sse2.asm                   |  8 ++++----
+ vp8/encoder/x86/quantize_mmx.asm                   | 10 +++++-----
+ vp8/encoder/x86/temporal_filter_apply_sse2.asm     |  4 ++--
+ vp9/encoder/x86/vp9_temporal_filter_apply_sse2.asm |  4 ++--
+ vpx_dsp/x86/halfpix_variance_impl_sse2.asm         |  6 +++---
+ vpx_dsp/x86/ssim_opt_x86_64.asm                    | 12 ++++++------
+ vpx_dsp/x86/variance_impl_mmx.asm                  | 10 +++++-----
+ 8 files changed, 29 insertions(+), 29 deletions(-)
+
+diff --git a/vp8/common/x86/subpixel_mmx.asm b/vp8/common/x86/subpixel_mmx.asm
+index 47dd45229..a40354996 100644
+--- a/vp8/common/x86/subpixel_mmx.asm
++++ b/vp8/common/x86/subpixel_mmx.asm
+@@ -38,7 +38,7 @@ sym(vp8_filter_block1d_h6_mmx):
+     push        rdi
+     ; end prolog
+ 
+-        mov         rdx,    arg(6) ;vp8_filter
++        mov         rdxp,   arg(6) ;vp8_filter
+ 
+         movq        mm1,    [rdx + 16]             ; do both the negative taps first!!!
+         movq        mm2,    [rdx + 32]         ;
+@@ -137,7 +137,7 @@ sym(vp8_filter_block1dc_v6_mmx):
+ 
+         movq      mm5, [GLOBAL(rd)]
+         push        rbx
+-        mov         rbx, arg(7) ;vp8_filter
++        mov         rbxp, arg(7) ;vp8_filter
+         movq      mm1, [rbx + 16]             ; do both the negative taps first!!!
+         movq      mm2, [rbx + 32]         ;
+         movq      mm6, [rbx + 48]        ;
+diff --git a/vp8/common/x86/subpixel_sse2.asm b/vp8/common/x86/subpixel_sse2.asm
+index 69f8d103c..5b8dd5ec6 100644
+--- a/vp8/common/x86/subpixel_sse2.asm
++++ b/vp8/common/x86/subpixel_sse2.asm
+@@ -44,7 +44,7 @@ sym(vp8_filter_block1d8_h6_sse2):
+     push        rdi
+     ; end prolog
+ 
+-        mov         rdx,        arg(6) ;vp8_filter
++        mov         rdxp,       arg(6) ;vp8_filter
+         mov         rsi,        arg(0) ;src_ptr
+ 
+         mov         rdi,        arg(1) ;output_ptr
+@@ -164,7 +164,7 @@ sym(vp8_filter_block1d16_h6_sse2):
+     push        rdi
+     ; end prolog
+ 
+-        mov         rdx,        arg(6) ;vp8_filter
++        mov         rdxp,       arg(6) ;vp8_filter
+         mov         rsi,        arg(0) ;src_ptr
+ 
+         mov         rdi,        arg(1) ;output_ptr
+@@ -340,7 +340,7 @@ sym(vp8_filter_block1d8_v6_sse2):
+     push        rdi
+     ; end prolog
+ 
+-        mov         rax,        arg(7) ;vp8_filter
++        mov         raxp,       arg(7) ;vp8_filter
+         movsxd      rdx,        dword ptr arg(3) ;pixels_per_line
+ 
+         mov         rdi,        arg(1) ;output_ptr
+@@ -435,7 +435,7 @@ sym(vp8_filter_block1d16_v6_sse2):
+     push        rdi
+     ; end prolog
+ 
+-        mov         rax,        arg(7) ;vp8_filter
++        mov         raxp,       arg(7) ;vp8_filter
+         movsxd      rdx,        dword ptr arg(3) ;pixels_per_line
+ 
+         mov         rdi,        arg(1) ;output_ptr
+diff --git a/vp8/encoder/x86/quantize_mmx.asm b/vp8/encoder/x86/quantize_mmx.asm
+index 2864ce16d..a6c719cdc 100644
+--- a/vp8/encoder/x86/quantize_mmx.asm
++++ b/vp8/encoder/x86/quantize_mmx.asm
+@@ -43,7 +43,7 @@ sym(vp8_fast_quantize_b_impl_mmx):
+         pandn           mm1,        mm2
+         movq            mm3,        mm1
+ 
+-        mov             rdx,        arg(6) ;quant_ptr
++        mov             rdxp,       arg(6) ;quant_ptr
+         movq            mm1,        [rdx]
+ 
+         mov             rcx,        arg(5) ;round_ptr
+@@ -64,7 +64,7 @@ sym(vp8_fast_quantize_b_impl_mmx):
+         movq            mm2,        [rax]
+ 
+         pmullw          mm3,        mm2
+-        mov             rax,        arg(7) ;dqcoeff_ptr
++        mov             raxp,       arg(7) ;dqcoeff_ptr
+ 
+         movq            [rax],      mm3
+ 
+@@ -104,7 +104,7 @@ sym(vp8_fast_quantize_b_impl_mmx):
+         movq            mm6,        [rax+8]
+ 
+         pmullw          mm7,        mm6
+-        mov             rax,        arg(7) ;dqcoeff_ptr
++        mov             raxp,       arg(7) ;dqcoeff_ptr
+ 
+         movq            [rax+8],    mm7
+ 
+@@ -145,7 +145,7 @@ sym(vp8_fast_quantize_b_impl_mmx):
+         movq            mm6,        [rax+16]
+ 
+         pmullw          mm7,        mm6
+-        mov             rax,        arg(7) ;dqcoeff_ptr
++        mov             raxp,       arg(7) ;dqcoeff_ptr
+ 
+         movq            [rax+16],   mm7
+ 
+@@ -186,7 +186,7 @@ sym(vp8_fast_quantize_b_impl_mmx):
+         movq            mm6,        [rax+24]
+ 
+         pmullw          mm7,        mm6
+-        mov             rax,        arg(7) ;dqcoeff_ptr
++        mov             raxp,       arg(7) ;dqcoeff_ptr
+ 
+         movq            [rax+24],   mm7
+ 
+diff --git a/vp8/encoder/x86/temporal_filter_apply_sse2.asm b/vp8/encoder/x86/temporal_filter_apply_sse2.asm
+index bd92b398a..704ef0e76 100644
+--- a/vp8/encoder/x86/temporal_filter_apply_sse2.asm
++++ b/vp8/encoder/x86/temporal_filter_apply_sse2.asm
+@@ -57,8 +57,8 @@ sym(vp8_temporal_filter_apply_sse2):
+ 
+         mov         rsi,            arg(0) ; src/frame1
+         mov         rdx,            arg(2) ; predictor frame
+-        mov         rdi,            arg(6) ; accumulator
+-        mov         rax,            arg(7) ; count
++        mov         rdip,           arg(6) ; accumulator
++        mov         raxp,           arg(7) ; count
+ 
+         ; dup the filter weight and store for later
+         movd        xmm0,           arg(5) ; filter_weight
+diff --git a/vp9/encoder/x86/vp9_temporal_filter_apply_sse2.asm b/vp9/encoder/x86/vp9_temporal_filter_apply_sse2.asm
+index 21aaa9383..b13c06f16 100644
+--- a/vp9/encoder/x86/vp9_temporal_filter_apply_sse2.asm
++++ b/vp9/encoder/x86/vp9_temporal_filter_apply_sse2.asm
+@@ -61,8 +61,8 @@ sym(vp9_temporal_filter_apply_sse2):
+ 
+         mov         rsi,            arg(0) ; src/frame1
+         mov         rdx,            arg(2) ; predictor frame
+-        mov         rdi,            arg(7) ; accumulator
+-        mov         rax,            arg(8) ; count
++        mov         rdip,           arg(7) ; accumulator
++        mov         raxp,           arg(8) ; count
+ 
+         ; dup the filter weight and store for later
+         movd        xmm0,           arg(6) ; filter_weight
+diff --git a/vpx_dsp/x86/halfpix_variance_impl_sse2.asm b/vpx_dsp/x86/halfpix_variance_impl_sse2.asm
+index cc26bb612..4223b0b97 100644
+--- a/vpx_dsp/x86/halfpix_variance_impl_sse2.asm
++++ b/vpx_dsp/x86/halfpix_variance_impl_sse2.asm
+@@ -108,7 +108,7 @@ vpx_half_horiz_vert_variance16x_h_1:
+         paddd       xmm0,           xmm1
+ 
+         mov         rsi,            arg(5) ;[Sum]
+-        mov         rdi,            arg(6) ;[SSE]
++        mov         rdip,           arg(6) ;[SSE]
+ 
+         movd        [rsi],       xmm0
+         movd        [rdi],       xmm6
+@@ -213,7 +213,7 @@ vpx_half_vert_variance16x_h_1:
+         paddd       xmm0,           xmm1
+ 
+         mov         rsi,            arg(5) ;[Sum]
+-        mov         rdi,            arg(6) ;[SSE]
++        mov         rdip,           arg(6) ;[SSE]
+ 
+         movd        [rsi],       xmm0
+         movd        [rdi],       xmm6
+@@ -315,7 +315,7 @@ vpx_half_horiz_variance16x_h_1:
+         paddd       xmm0,           xmm1
+ 
+         mov         rsi,            arg(5) ;[Sum]
+-        mov         rdi,            arg(6) ;[SSE]
++        mov         rdip,           arg(6) ;[SSE]
+ 
+         movd        [rsi],       xmm0
+         movd        [rdi],       xmm6
+diff --git a/vpx_dsp/x86/ssim_opt_x86_64.asm b/vpx_dsp/x86/ssim_opt_x86_64.asm
+index 6d58321e0..a296301b0 100644
+--- a/vpx_dsp/x86/ssim_opt_x86_64.asm
++++ b/vpx_dsp/x86/ssim_opt_x86_64.asm
+@@ -119,11 +119,11 @@ sym(vpx_ssim_parms_16x16_sse2):
+     movd            [rdi], xmm15;
+     mov             rdi,arg(5)
+     movd            [rdi], xmm14;
+-    mov             rdi,arg(6)
++    mov             rdip,arg(6)
+     movd            [rdi], xmm13;
+-    mov             rdi,arg(7)
++    mov             rdip,arg(7)
+     movd            [rdi], xmm12;
+-    mov             rdi,arg(8)
++    mov             rdip,arg(8)
+     movd            [rdi], xmm11;
+ 
+     ; begin epilog
+@@ -200,11 +200,11 @@ sym(vpx_ssim_parms_8x8_sse2):
+     movd            [rdi], xmm15;
+     mov             rdi,arg(5)
+     movd            [rdi], xmm14;
+-    mov             rdi,arg(6)
++    mov             rdip,arg(6)
+     movd            [rdi], xmm13;
+-    mov             rdi,arg(7)
++    mov             rdip,arg(7)
+     movd            [rdi], xmm12;
+-    mov             rdi,arg(8)
++    mov             rdip,arg(8)
+     movd            [rdi], xmm11;
+ 
+     ; begin epilog
+diff --git a/vpx_dsp/x86/variance_impl_mmx.asm b/vpx_dsp/x86/variance_impl_mmx.asm
+index b8ba79b65..1e9ddc873 100644
+--- a/vpx_dsp/x86/variance_impl_mmx.asm
++++ b/vpx_dsp/x86/variance_impl_mmx.asm
+@@ -535,8 +535,8 @@ sym(vpx_filter_block2d_bil4x4_var_mmx):
+         psrlq           mm4,            32                  ;
+         paddd           mm4,            mm7                 ;
+ 
+-        mov             rdi,            arg(6) ;sum
+-        mov             rsi,            arg(7) ;sumsquared
++        mov             rdip,           arg(6) ;sum
++        mov             rsip,           arg(7) ;sumsquared
+ 
+         movd            dword ptr [rdi],          mm2                 ;
+         movd            dword ptr [rsi],          mm4                 ;
+@@ -577,7 +577,7 @@ sym(vpx_filter_block2d_bil_var_mmx):
+         pxor            mm7,            mm7                 ;
+         mov             rax,            arg(5) ;HFilter             ;
+ 
+-        mov             rdx,            arg(6) ;VFilter             ;
++        mov             rdxp,           arg(6) ;VFilter             ;
+         mov             rsi,            arg(0) ;ref_ptr              ;
+ 
+         mov             rdi,            arg(2) ;src_ptr              ;
+@@ -722,8 +722,8 @@ sym(vpx_filter_block2d_bil_var_mmx):
+         psrlq           mm4,            32                  ;
+         paddd           mm4,            mm7                 ;
+ 
+-        mov             rdi,            arg(7) ;sum
+-        mov             rsi,            arg(8) ;sumsquared
++        mov             rdip,           arg(7) ;sum
++        mov             rsip,           arg(8) ;sumsquared
+ 
+         movd            dword ptr [rdi],          mm2                 ;
+         movd            dword ptr [rsi],          mm4                 ;
+-- 
+2.16.4
+

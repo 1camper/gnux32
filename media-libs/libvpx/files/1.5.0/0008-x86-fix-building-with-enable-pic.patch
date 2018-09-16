@@ -1,0 +1,43 @@
+From a2a8e0d37c16b5220a0ef599274fd77224143ced Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 16 Sep 2018 15:11:27 +0200
+Subject: [PATCH 08/12] x86: fix building with --enable-pic
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: Iec68e5d9420b6c2ec69d94384abb8c92683c2593
+---
+ vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm b/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
+index 93df92a9e..5aaf40329 100644
+--- a/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
++++ b/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
+@@ -79,7 +79,8 @@ SECTION .text
+ 
+ %macro INC_SRC_BY_SRC_STRIDE  0
+ %if ARCH_X86=1 && CONFIG_PIC=1
+-  lea                srcq, [srcq + src_stridemp*2]
++  add                srcq, src_stridemp
++  add                srcq, src_stridemp
+ %else
+   lea                srcq, [srcq + src_strideq*2]
+ %endif
+@@ -87,7 +88,10 @@ SECTION .text
+ 
+ %macro INC_SRC_BY_SRC_2STRIDE  0
+ %if ARCH_X86=1 && CONFIG_PIC=1
+-  lea                srcq, [srcq + src_stridemp*4]
++  add                srcq, src_stridemp
++  add                srcq, src_stridemp
++  add                srcq, src_stridemp
++  add                srcq, src_stridemp
+ %else
+   lea                srcq, [srcq + src_strideq*4]
+ %endif
+-- 
+2.16.4
+

@@ -1,0 +1,44 @@
+From b99ba37b8ac091732da6445f0d86c9ba1f09f0a6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Thu, 13 Sep 2018 05:15:12 +0200
+Subject: [PATCH 06/12] segfault: fix unaligned access
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I7af70f69714f4b369dbb5486dd7057e2fff0fb52
+---
+ vpx_dsp/psnrhvs.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/vpx_dsp/psnrhvs.c b/vpx_dsp/psnrhvs.c
+index 300170579..4d4cc85f6 100644
+--- a/vpx_dsp/psnrhvs.c
++++ b/vpx_dsp/psnrhvs.c
+@@ -17,6 +17,7 @@
+ #include "./vpx_config.h"
+ #include "./vpx_dsp_rtcd.h"
+ #include "vpx_dsp/ssim.h"
++#include "vpx_ports/mem.h"
+ #include "vpx_ports/system_state.h"
+ 
+ #if !defined(M_PI)
+@@ -94,9 +95,11 @@ static double calc_psnrhvs(const unsigned char *_src, int _systride,
+                            double _par, int _w, int _h, int _step,
+                            const float _csf[8][8]) {
+   float ret;
+-  int16_t dct_s[8 * 8], dct_d[8 * 8];
+-  tran_low_t dct_s_coef[8 * 8], dct_d_coef[8 * 8];
+-  float mask[8][8];
++  DECLARE_ALIGNED(16, int16_t, dct_s[8 * 8]);
++  DECLARE_ALIGNED(16, int16_t, dct_d[8 * 8]);
++  DECLARE_ALIGNED(16, tran_low_t, dct_s_coef[8 * 8]);
++  DECLARE_ALIGNED(16, tran_low_t, dct_d_coef[8 * 8]);
++  double mask[8][8];
+   int pixels;
+   int x;
+   int y;
+-- 
+2.16.4
+

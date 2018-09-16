@@ -1,0 +1,91 @@
+From 6fb50bc67c84b177ab270aa69b099fc747827ad1 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sat, 8 Sep 2018 20:38:40 +0200
+Subject: [PATCH 09/13] fix segfault in DatarateOnePassCbrSvcSingleBR test
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: Id3878a437a9fbe0941314d9a38eb55982f147364
+---
+ vp9/common/vp9_postproc.c | 4 ++--
+ vp9/common/vp9_postproc.h | 2 +-
+ vp9/decoder/vp9_decoder.c | 2 +-
+ vp9/encoder/vp9_encoder.c | 5 +++--
+ 4 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/vp9/common/vp9_postproc.c b/vp9/common/vp9_postproc.c
+index dfc315eea..5373b0218 100644
+--- a/vp9/common/vp9_postproc.c
++++ b/vp9/common/vp9_postproc.c
+@@ -293,7 +293,7 @@ static void swap_mi_and_prev_mi(VP9_COMMON *cm) {
+ }
+ 
+ int vp9_post_proc_frame(struct VP9Common *cm, YV12_BUFFER_CONFIG *dest,
+-                        vp9_ppflags_t *ppflags) {
++                        vp9_ppflags_t *ppflags, int unscaled_width) {
+   const int q = VPXMIN(105, cm->lf.filter_level * 2);
+   const int flags = ppflags->post_proc_flag;
+   YV12_BUFFER_CONFIG *const ppbuf = &cm->post_proc_buffer;
+@@ -359,7 +359,7 @@ int vp9_post_proc_frame(struct VP9Common *cm, YV12_BUFFER_CONFIG *dest,
+   if (flags & (VP9D_DEMACROBLOCK | VP9D_DEBLOCK)) {
+     if (!cm->postproc_state.limits) {
+       cm->postproc_state.limits =
+-          vpx_calloc(cm->width, sizeof(*cm->postproc_state.limits));
++          vpx_calloc(unscaled_width, sizeof(*cm->postproc_state.limits));
+     }
+   }
+ 
+diff --git a/vp9/common/vp9_postproc.h b/vp9/common/vp9_postproc.h
+index 605909411..321c3b145 100644
+--- a/vp9/common/vp9_postproc.h
++++ b/vp9/common/vp9_postproc.h
+@@ -38,7 +38,7 @@ struct VP9Common;
+ #define MFQE_PRECISION 4
+ 
+ int vp9_post_proc_frame(struct VP9Common *cm, YV12_BUFFER_CONFIG *dest,
+-                        vp9_ppflags_t *flags);
++                        vp9_ppflags_t *flags, int unscaled_width);
+ 
+ void vp9_denoise(const YV12_BUFFER_CONFIG *src, YV12_BUFFER_CONFIG *dst, int q,
+                  uint8_t *limits);
+diff --git a/vp9/decoder/vp9_decoder.c b/vp9/decoder/vp9_decoder.c
+index a913fa560..315cdf53e 100644
+--- a/vp9/decoder/vp9_decoder.c
++++ b/vp9/decoder/vp9_decoder.c
+@@ -394,7 +394,7 @@ int vp9_get_raw_frame(VP9Decoder *pbi, YV12_BUFFER_CONFIG *sd,
+ 
+ #if CONFIG_VP9_POSTPROC
+   if (!cm->show_existing_frame) {
+-    ret = vp9_post_proc_frame(cm, sd, flags);
++    ret = vp9_post_proc_frame(cm, sd, flags, cm->width);
+   } else {
+     *sd = *cm->frame_to_show;
+     ret = 0;
+diff --git a/vp9/encoder/vp9_encoder.c b/vp9/encoder/vp9_encoder.c
+index 2f6591109..eaca6c751 100644
+--- a/vp9/encoder/vp9_encoder.c
++++ b/vp9/encoder/vp9_encoder.c
+@@ -5421,7 +5421,8 @@ int vp9_get_compressed_data(VP9_COMP *cpi, unsigned int *frame_flags,
+             ppflags.post_proc_flag = VP9D_DEBLOCK;
+             ppflags.deblocking_level = 0;  // not used in vp9_post_proc_frame()
+             ppflags.noise_level = 0;       // not used in vp9_post_proc_frame()
+-            vp9_post_proc_frame(cm, pp, &ppflags);
++            vp9_post_proc_frame(cm, pp, &ppflags,
++                                cpi->un_scaled_source->y_width);
+           }
+ #endif
+           vpx_clear_system_state();
+@@ -5568,7 +5569,7 @@ int vp9_get_preview_raw_frame(VP9_COMP *cpi, YV12_BUFFER_CONFIG *dest,
+   } else {
+     int ret;
+ #if CONFIG_VP9_POSTPROC
+-    ret = vp9_post_proc_frame(cm, dest, flags);
++    ret = vp9_post_proc_frame(cm, dest, flags, cpi->un_scaled_source->y_width);
+ #else
+     if (cm->frame_to_show) {
+       *dest = *cm->frame_to_show;
+-- 
+2.16.4
+

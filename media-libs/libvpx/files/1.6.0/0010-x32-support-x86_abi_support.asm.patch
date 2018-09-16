@@ -1,0 +1,113 @@
+From e83c7d9e0435b2a4c33be99f9d6f1c51d2cd5082 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 9 Sep 2018 22:51:20 +0200
+Subject: [PATCH 10/13] x32 support: x86_abi_support.asm
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I6f6e5bacaa5e0fac9cd14801bf81aec3c78e8e44
+---
+ vpx_ports/x86_abi_support.asm | 57 ++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 53 insertions(+), 4 deletions(-)
+
+diff --git a/vpx_ports/x86_abi_support.asm b/vpx_ports/x86_abi_support.asm
+index 708fa101c..31eab5e91 100644
+--- a/vpx_ports/x86_abi_support.asm
++++ b/vpx_ports/x86_abi_support.asm
+@@ -28,6 +28,12 @@
+ %define ABI_IS_32BIT 0
+ %endif
+ 
++%ifidn __OUTPUT_FORMAT__,elfx32
++%define ABI_X32 1
++%else
++%define ABI_X32 0
++%endif
++
+ %if ABI_IS_32BIT
+ %define rax eax
+ %define rbx ebx
+@@ -37,6 +43,14 @@
+ %define rdi edi
+ %define rsp esp
+ %define rbp ebp
++%define eaxp eax
++%define ebxp ebx
++%define ecxp ecx
++%define edxp edx
++%define esip esi
++%define edip edi
++%define espp esp
++%define ebpp ebp
+ %define movsxd mov
+ %macro movq 2
+   %ifidn %1,eax
+@@ -77,6 +91,41 @@
+ %endmacro
+ %endif
+ 
++%if ABI_IS_32BIT || ABI_X32
++%define raxp eax
++%define rbxp ebx
++%define rcxp ecx
++%define rdxp edx
++%define rsip esi
++%define rdip edi
++%define rspp esp
++%define rbpp ebp
++%define r8p r8d
++%define r9p r9d
++%define r10p r10d
++%define r11p r11d
++%define r12p r12d
++%define r13p r13d
++%define r14p r14d
++%define r15p r15d
++%else
++%define raxp rax
++%define rbxp rbx
++%define rcxp rcx
++%define rdxp rdx
++%define rsip rsi
++%define rdip rdi
++%define rspp rsp
++%define rbpp rbp
++%define r8p r8
++%define r9p r9
++%define r10p r10
++%define r11p r11
++%define r12p r12
++%define r13p r13
++%define r14p r14
++%define r15p r15
++%endif
+ 
+ ; LIBVPX_YASM_WIN64
+ ; Set LIBVPX_YASM_WIN64 if output is Windows 64bit so the code will work if x64
+@@ -167,9 +216,9 @@
+ ; This macro uses one temporary register, which is not preserved, and thus
+ ; must be specified as an argument.
+ %macro ALIGN_STACK 2
+-    mov         %2, rsp
+-    and         rsp, -%1
+-    lea         rsp, [rsp - (%1 - REG_SZ_BYTES)]
++    mov         %2 %+ p, rspp
++    and         rspp, -%1
++    lea         rspp, [rsp - (%1 - REG_SZ_BYTES)]
+     push        %2
+ %endmacro
+ 
+@@ -312,7 +361,7 @@
+     %endif
+   %endm
+ %endif
+-  %define UNSHADOW_ARGS mov rsp, rbp
++  %define UNSHADOW_ARGS mov rspp, rbpp
+ %endif
+ 
+ ; Win64 ABI requires that XMM6:XMM15 are callee saved
+-- 
+2.16.4
+
