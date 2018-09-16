@@ -1,4 +1,4 @@
-From ded4a07d688dd013988fc2cef6f8c24c1393995d Mon Sep 17 00:00:00 2001
+From be59b0846f355a3e9e3d565aa6cf14b83aebb99a Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 16 Sep 2018 15:32:49 +0200
 Subject: [PATCH 13/13] x32 support: x86inc.asm users

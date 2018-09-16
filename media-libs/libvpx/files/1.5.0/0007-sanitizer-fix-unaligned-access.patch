@@ -1,4 +1,4 @@
-From 9a1f3e4623b96073b9a14464deaf6e82f28dd03e Mon Sep 17 00:00:00 2001
+From 7ea1a48b24466695ac961c2a1599314d451db77e Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Thu, 13 Sep 2018 05:20:21 +0200
 Subject: [PATCH 07/12] sanitizer: fix unaligned access

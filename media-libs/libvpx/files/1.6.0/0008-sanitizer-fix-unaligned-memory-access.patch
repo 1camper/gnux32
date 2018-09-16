@@ -1,4 +1,4 @@
-From bb7d66140ece53c74976ffb0fbb7e4c0738873e3 Mon Sep 17 00:00:00 2001
+From b7336b84fc3e4a34705d51ccd4716056ac4ad910 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 16 Sep 2018 16:37:22 +0200
 Subject: [PATCH 08/13] sanitizer: fix unaligned memory access

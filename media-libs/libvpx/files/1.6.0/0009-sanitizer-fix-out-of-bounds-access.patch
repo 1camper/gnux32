@@ -1,4 +1,4 @@
-From 3cc2b434bd73310d495c9b24d6e0368b7cf2564e Mon Sep 17 00:00:00 2001
+From 799a40cadb689bb63b2755a3971fd08ebfb392e0 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 9 Sep 2018 22:47:21 +0200
 Subject: [PATCH 09/13] sanitizer: fix out of bounds access

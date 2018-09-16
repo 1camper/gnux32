@@ -1,4 +1,4 @@
-From 4a37bbfc8018192a24b4b4553c0e53ffe310bd17 Mon Sep 17 00:00:00 2001
+From ed285163628320cea22bacfb340431b0929d628a Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Thu, 13 Sep 2018 05:15:12 +0200
 Subject: [PATCH 06/13] segfault: fix unaligned access
@@ -9,11 +9,11 @@ Content-Transfer-Encoding: 8bit
 Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
 Change-Id: I7af70f69714f4b369dbb5486dd7057e2fff0fb52
 ---
- vpx_dsp/psnrhvs.c | 9 ++++++---
- 1 file changed, 6 insertions(+), 3 deletions(-)
+ vpx_dsp/psnrhvs.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/vpx_dsp/psnrhvs.c b/vpx_dsp/psnrhvs.c
-index 0ffa1b251..c8b222d3a 100644
+index 0ffa1b251..c3a49ffef 100644
 --- a/vpx_dsp/psnrhvs.c
 +++ b/vpx_dsp/psnrhvs.c
 @@ -17,6 +17,7 @@
@@ -24,21 +24,19 @@ index 0ffa1b251..c8b222d3a 100644
  #include "vpx_ports/system_state.h"
  
  #if !defined(M_PI)
-@@ -94,9 +95,11 @@ static double calc_psnrhvs(const unsigned char *_src, int _systride,
+@@ -94,8 +95,10 @@ static double calc_psnrhvs(const unsigned char *_src, int _systride,
                             double _par, int _w, int _h, int _step,
                             const float _csf[8][8]) {
    float ret;
 -  int16_t dct_s[8 * 8], dct_d[8 * 8];
 -  tran_low_t dct_s_coef[8 * 8], dct_d_coef[8 * 8];
--  float mask[8][8];
 +  DECLARE_ALIGNED(16, int16_t, dct_s[8 * 8]);
 +  DECLARE_ALIGNED(16, int16_t, dct_d[8 * 8]);
 +  DECLARE_ALIGNED(16, tran_low_t, dct_s_coef[8 * 8]);
 +  DECLARE_ALIGNED(16, tran_low_t, dct_d_coef[8 * 8]);
-+  double mask[8][8];
+   float mask[8][8];
    int pixels;
    int x;
-   int y;
 -- 
 2.16.4
 

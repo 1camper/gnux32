@@ -1,4 +1,4 @@
-From 7d17daab7b28a5c673149707fd32c369aa80a6bf Mon Sep 17 00:00:00 2001
+From 0705818147946486748c18f0443f19e3c39395cd Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 16 Sep 2018 15:32:49 +0200
 Subject: [PATCH 12/12] x32 support: x86inc.asm users

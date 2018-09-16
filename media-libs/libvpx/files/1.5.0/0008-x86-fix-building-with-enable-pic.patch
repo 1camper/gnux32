@@ -1,4 +1,4 @@
-From a2a8e0d37c16b5220a0ef599274fd77224143ced Mon Sep 17 00:00:00 2001
+From 1ccc0f2c108522b6b400c3beb932973b4e13397c Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 16 Sep 2018 15:11:27 +0200
 Subject: [PATCH 08/12] x86: fix building with --enable-pic
