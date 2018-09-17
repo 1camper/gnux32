@@ -1,7 +1,7 @@
 From b17e45859a8de8cef9cc5ca5ef0fa9388e9c7a23 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Thu, 13 Sep 2018 05:15:12 +0200
-Subject: [PATCH 07/15] segfault: fix unaligned access
+Subject: [PATCH 07/16] segfault: fix unaligned access
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

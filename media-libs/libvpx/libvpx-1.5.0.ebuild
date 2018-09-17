@@ -26,7 +26,7 @@ HOMEPAGE="https://www.webmproject.org"
 
 LICENSE="BSD"
 SLOT="0/3"
-IUSE="cpu_flags_x86_avx cpu_flags_x86_avx2 doc cpu_flags_x86_mmx postproc cpu_flags_x86_sse cpu_flags_x86_sse2 cpu_flags_x86_sse3 cpu_flags_x86_ssse3 cpu_flags_x86_sse4_1 static-libs svc test +threads"
+IUSE="cpu_flags_x86_avx cpu_flags_x86_avx2 doc cpu_flags_x86_mmx postproc cpu_flags_x86_sse cpu_flags_x86_sse2 cpu_flags_x86_sse3 cpu_flags_x86_ssse3 cpu_flags_x86_sse4_1 +highbitdepth static-libs svc test +threads"
 
 RDEPEND=""
 DEPEND="abi_x86_32? ( dev-lang/yasm )
@@ -120,6 +120,7 @@ multilib_src_configure() {
 		$(use_enable static-libs static) \
 		$(use_enable test unit-tests) \
 		$(use_enable threads multithread) \
+		$(use_enable highbitdepth vp9-highbitdepth) \
 		${myconf} \
 		|| die
 }

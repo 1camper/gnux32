@@ -36,19 +36,20 @@ REQUIRED_USE="
 PATCHES=(
 	"${FILESDIR}/libvpx-1.3.0-sparc-configure.patch" # 501010
 
-	epatch "${FILESDIR}/${PV}/0001-Fix-segmentation-fault-caused-by-denoiser-working-wi.patch"
-	epatch "${FILESDIR}/${PV}/0002-sanitizer-don-t-call-non-static-function-for-non-exi.patch"
-	epatch "${FILESDIR}/${PV}/0003-valgrind-fix-using-unitialized-memory-memleak.patch"
-	epatch "${FILESDIR}/${PV}/0004-valgrind-fix-uninitialized-memory.patch"
-	epatch "${FILESDIR}/${PV}/0005-quantize_ssse3_x86_64.asm-fix-data-heap-corruption.patch"
-	epatch "${FILESDIR}/${PV}/0006-segfault-fix-unaligned-access.patch"
-	epatch "${FILESDIR}/${PV}/0007-sanitizer-fix-unaligned-access.patch"
-	epatch "${FILESDIR}/${PV}/0008-sanitizer-fix-unaligned-memory-access.patch"
-	epatch "${FILESDIR}/${PV}/0009-sanitizer-fix-out-of-bounds-access.patch"
-	epatch "${FILESDIR}/${PV}/0010-x32-support-x86_abi_support.asm.patch"
-	epatch "${FILESDIR}/${PV}/0011-x32-support-x86_abi_support.asm-users.patch"
-	epatch "${FILESDIR}/${PV}/0012-x32-support-x86inc.asm.patch"
-	epatch "${FILESDIR}/${PV}/0013-x32-support-x86inc.asm-users.patch"
+	"${FILESDIR}/${PV}/0001-Fix-segmentation-fault-caused-by-denoiser-working-wi.patch"
+	"${FILESDIR}/${PV}/0002-sanitizer-don-t-call-non-static-function-for-non-exi.patch"
+	"${FILESDIR}/${PV}/0003-valgrind-fix-using-unitialized-memory-memleak.patch"
+	"${FILESDIR}/${PV}/0004-valgrind-fix-uninitialized-memory.patch"
+	"${FILESDIR}/${PV}/0005-quantize_ssse3_x86_64.asm-fix-data-heap-corruption.patch"
+	"${FILESDIR}/${PV}/0006-segfault-fix-unaligned-access.patch"
+	"${FILESDIR}/${PV}/0007-sanitizer-fix-unaligned-access.patch"
+	"${FILESDIR}/${PV}/0008-sanitizer-fix-unaligned-memory-access.patch"
+	"${FILESDIR}/${PV}/0009-sanitizer-fix-out-of-bounds-access.patch"
+	"${FILESDIR}/${PV}/0010-x86-fix-building-with-enable-pic.patch"
+	"${FILESDIR}/${PV}/0011-x32-support-x86_abi_support.asm.patch"
+	"${FILESDIR}/${PV}/0012-x32-support-x86_abi_support.asm-users.patch"
+	"${FILESDIR}/${PV}/0013-x32-support-x86inc.asm.patch"
+	"${FILESDIR}/${PV}/0014-x32-support-x86inc.asm-users.patch"
 )
 
 src_configure() {

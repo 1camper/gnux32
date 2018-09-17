@@ -1,4 +1,4 @@
-From 7a473d2c6208f558f2931fcf6012dc1589f30095 Mon Sep 17 00:00:00 2001
+From 82f172060364b31f1e311e85840c80efcde536be Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 16 Sep 2018 15:14:42 +0200
 Subject: [PATCH 11/12] x32 support: x86inc.asm
@@ -9,9 +9,11 @@ Content-Transfer-Encoding: 8bit
 Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
 Change-Id: I252d1fbca684f6a8f6e5b582ccd5c3106cbd1cff
 ---
- third_party/libyuv/source/x86inc.asm |   3 +
- third_party/x86inc/x86inc.asm        | 344 ++++++++++++++++++++++++++++-------
- 2 files changed, 282 insertions(+), 65 deletions(-)
+ third_party/libyuv/source/x86inc.asm             |   3 +
+ third_party/x86inc/x86inc.asm                    | 376 ++++++++++++++++++-----
+ vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm |   6 +-
+ vpx_dsp/x86/subpel_variance_sse2.asm             |   6 +-
+ 4 files changed, 309 insertions(+), 82 deletions(-)
 
 diff --git a/third_party/libyuv/source/x86inc.asm b/third_party/libyuv/source/x86inc.asm
 index cb5c32df3..6c5830515 100644
@@ -28,7 +30,7 @@ index cb5c32df3..6c5830515 100644
  section .note.GNU-stack noalloc noexec nowrite progbits
  %endif
 diff --git a/third_party/x86inc/x86inc.asm b/third_party/x86inc/x86inc.asm
-index be59de311..bce0928f5 100644
+index be59de311..56cb78d67 100644
 --- a/third_party/x86inc/x86inc.asm
 +++ b/third_party/x86inc/x86inc.asm
 @@ -66,9 +66,19 @@
@@ -52,7 +54,75 @@ index be59de311..bce0928f5 100644
      %define mangle(x) x
  %elifidn __OUTPUT_FORMAT__,x64
      %define mangle(x) x
-@@ -211,10 +221,45 @@
+@@ -121,9 +131,8 @@
+         %ifidn __OUTPUT_FORMAT__,elf32
+             %define GET_GOT_SAVE_ARG 1
+             %define WRT_PLT wrt ..plt
+-            %macro GET_GOT 1
++            %macro GET_GOT_NO_SAVE 1
+                 extern _GLOBAL_OFFSET_TABLE_
+-                push %1
+                 call %%get_got
+                 %%sub_offset:
+                 jmp %%exitGG
+@@ -134,20 +143,31 @@
+                 %%exitGG:
+                 %undef GLOBAL
+                 %define GLOBAL(x) x + %1 wrt ..gotoff
+-                %undef RESTORE_GOT
+-                %define RESTORE_GOT pop %1
++                %define RESTORE_GOT
++            %endmacro
++            %macro GET_GOT 1
++                PUSH %1
++                GET_GOT_NO_SAVE %1
++                %define RESTORE_GOT POP %1
+             %endmacro
+         %elifidn __OUTPUT_FORMAT__,macho32
+             %define GET_GOT_SAVE_ARG 1
+-            %macro GET_GOT 1
+-                push %1
++            %macro GET_GOT_NO_SAVE 1
+                 call %%get_got
++                %%sub_offset:
++                jmp %%exitGG
+                 %%get_got:
+-                pop  %1
++                mov %1, [esp] ; dont trash the return stack
++                ret
++                %%exitGG:
+                 %undef GLOBAL
+                 %define GLOBAL(x) x + %1 - %%get_got
+-                %undef RESTORE_GOT
+-                %define RESTORE_GOT pop %1
++                %define RESTORE_GOT
++            %endmacro
++            %macro GET_GOT 1
++                PUSH %1
++                GET_GOT_NO_SAVE %1
++                %define RESTORE_GOT POP %1
+             %endmacro
+         %endif
+     %endif
+@@ -157,6 +177,8 @@
+     %endif
+ 
+ %else
++    %macro GET_GOT_NO_SAVE 1
++    %endmacro
+     %macro GET_GOT 1
+     %endmacro
+     %define GLOBAL(x) rel x
+@@ -172,6 +194,8 @@
+ %endif
+ 
+ %ifnmacro GET_GOT
++    %macro GET_GOT_NO_SAVE 1
++    %endmacro
+     %macro GET_GOT 1
+     %endmacro
+     %define GLOBAL(x) x
+@@ -211,10 +235,45 @@
  ; declares a function (foo) that automatically loads two arguments (dst and
  ; src) into registers, uses one additional register (tmp) plus 7 vector
  ; registers (m0-m6) and allocates 0x40 bytes of stack space.
@@ -102,7 +172,7 @@ index be59de311..bce0928f5 100644
  
  ; RET:
  ; Pops anything that was pushed by PROLOGUE, and returns.
-@@ -224,26 +269,48 @@
+@@ -224,26 +283,48 @@
  
  ; registers:
  ; rN and rNq are the native-size register holding function argument N
@@ -159,7 +229,7 @@ index be59de311..bce0928f5 100644
      %endif
      %define r%1  %2
  %endmacro
-@@ -259,9 +326,16 @@
+@@ -259,9 +340,16 @@
      %define e%1h %3
      %define r%1b %2
      %define e%1b %2
@@ -179,7 +249,7 @@ index be59de311..bce0928f5 100644
  %endmacro
  
  DECLARE_REG_SIZE ax, al, ah
-@@ -271,6 +345,7 @@ DECLARE_REG_SIZE dx, dl, dh
+@@ -271,6 +359,7 @@ DECLARE_REG_SIZE dx, dl, dh
  DECLARE_REG_SIZE si, sil, null
  DECLARE_REG_SIZE di, dil, null
  DECLARE_REG_SIZE bp, bpl, null
@@ -187,7 +257,7 @@ index be59de311..bce0928f5 100644
  
  ; t# defines for when per-arch register allocation is more complex than just function arguments
  
-@@ -286,6 +361,7 @@ DECLARE_REG_SIZE bp, bpl, null
+@@ -286,6 +375,7 @@ DECLARE_REG_SIZE bp, bpl, null
  %macro DECLARE_REG_TMP_SIZE 0-*
      %rep %0
          %define t%1q t%1 %+ q
@@ -195,7 +265,7 @@ index be59de311..bce0928f5 100644
          %define t%1d t%1 %+ d
          %define t%1w t%1 %+ w
          %define t%1h t%1 %+ h
-@@ -302,6 +378,18 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+@@ -302,6 +392,18 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
      %define gprsize 4
  %endif
  
@@ -214,7 +284,7 @@ index be59de311..bce0928f5 100644
  %macro PUSH 1
      push %1
      %ifidn rstk, rsp
-@@ -337,7 +425,25 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+@@ -337,7 +439,25 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
  %macro LOAD_IF_USED 1-*
      %rep %0
          %if %1 < num_args
@@ -241,7 +311,7 @@ index be59de311..bce0928f5 100644
          %endif
          %rotate 1
      %endrep
-@@ -347,6 +453,8 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+@@ -347,6 +467,8 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
      sub %1, %2
      %ifidn %1, rstk
          %assign stack_offset stack_offset+(%2)
@@ -250,7 +320,7 @@ index be59de311..bce0928f5 100644
      %endif
  %endmacro
  
-@@ -354,6 +462,8 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+@@ -354,6 +476,8 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
      add %1, %2
      %ifidn %1, rstk
          %assign stack_offset stack_offset-(%2)
@@ -259,7 +329,7 @@ index be59de311..bce0928f5 100644
      %endif
  %endmacro
  
-@@ -380,12 +490,18 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+@@ -380,12 +504,18 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
          %assign %%i 0
          %rep n_arg_names
              CAT_UNDEF arg_name %+ %%i, q
@@ -278,7 +348,7 @@ index be59de311..bce0928f5 100644
              CAT_UNDEF arg_name, %%i
              %assign %%i %%i+1
          %endrep
-@@ -394,22 +510,135 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+@@ -394,22 +524,135 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
      %xdefine %%stack_offset stack_offset
      %undef stack_offset ; so that the current value of stack_offset doesn't get baked in by xdefine
      %assign %%i 0
@@ -423,7 +493,7 @@ index be59de311..bce0928f5 100644
  %define required_stack_alignment ((mmsize + 15) & ~15)
  
  %macro ALLOC_STACK 1-2 0 ; stack_size, n_xmm_regs (for win64 only)
-@@ -432,25 +661,26 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+@@ -432,25 +675,26 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
              %if required_stack_alignment <= STACK_ALIGNMENT
                  ; maintain the current stack alignment
                  %assign stack_size_padded stack_size + %%pad + ((-%%pad-stack_offset-gprsize) & (STACK_ALIGNMENT-1))
@@ -458,7 +528,7 @@ index be59de311..bce0928f5 100644
              %endif
              WIN64_PUSH_XMM
          %endif
-@@ -508,8 +738,8 @@ DECLARE_REG 14, R15, 120
+@@ -508,8 +752,8 @@ DECLARE_REG 14, R15, 120
      %if mmsize != 8 && stack_size == 0
          WIN64_SPILL_XMM %3
      %endif
@@ -468,7 +538,7 @@ index be59de311..bce0928f5 100644
  %endmacro
  
  %macro WIN64_PUSH_XMM 0
-@@ -609,20 +839,20 @@ DECLARE_REG 14, R15, 72
+@@ -609,20 +853,20 @@ DECLARE_REG 14, R15, 72
      ASSERT regs_used <= 15
      PUSH_IF_USED 9, 10, 11, 12, 13, 14
      ALLOC_STACK %4
@@ -497,7 +567,7 @@ index be59de311..bce0928f5 100644
      POP_IF_USED 14, 13, 12, 11, 10, 9
  %if mmsize == 32
      vzeroupper
-@@ -639,17 +869,6 @@ DECLARE_REG 3, ebx, 16
+@@ -639,17 +883,6 @@ DECLARE_REG 3, ebx, 16
  DECLARE_REG 4, esi, 20
  DECLARE_REG 5, edi, 24
  DECLARE_REG 6, ebp, 28
@@ -515,7 +585,7 @@ index be59de311..bce0928f5 100644
  
  %macro PROLOGUE 2-5+ ; #args, #regs, #xmm_regs, [stack_size,] arg_names...
      %assign num_args %1
-@@ -665,8 +884,8 @@ DECLARE_ARG 7, 8, 9, 10, 11, 12, 13, 14
+@@ -665,8 +898,8 @@ DECLARE_ARG 7, 8, 9, 10, 11, 12, 13, 14
      ASSERT regs_used <= 7
      PUSH_IF_USED 3, 4, 5, 6
      ALLOC_STACK %4
@@ -525,7 +595,7 @@ index be59de311..bce0928f5 100644
  %endmacro
  
  %define has_epilogue regs_used > 3 || mmsize == 32 || stack_size > 0
-@@ -780,9 +999,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
+@@ -780,9 +1013,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
          CAT_XDEFINE cglobaled_, %2, 1
      %endif
      %xdefine current_function %2
@@ -536,7 +606,7 @@ index be59de311..bce0928f5 100644
          global %2:function %%VISIBILITY
      %elifidn __OUTPUT_FORMAT__,macho32
          %ifdef __NASM_VER__
-@@ -803,6 +1020,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
+@@ -803,6 +1034,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
      %2:
      RESET_MM_PERMUTATION        ; needed for x86-64, also makes disassembly somewhat nicer
      %xdefine rstk rsp           ; copy of the original stack pointer, used when greater alignment than the known stack alignment is required
@@ -544,7 +614,7 @@ index be59de311..bce0928f5 100644
      %assign stack_offset 0      ; stack pointer offset relative to the return address
      %assign stack_size 0        ; amount of stack space that can be freely used inside a function
      %assign stack_size_padded 0 ; total amount of allocated stack space, including space for callee-saved xmm registers on WIN64 and alignment padding
-@@ -827,9 +1045,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
+@@ -827,9 +1059,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
  
  %macro const 1-2+
      %xdefine %1 mangle(private_prefix %+ _ %+ %1)
@@ -555,7 +625,7 @@ index be59de311..bce0928f5 100644
          global %1:data hidden
      %else
          global %1
-@@ -839,9 +1055,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
+@@ -839,9 +1069,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
  
  ; This is needed for ELF, otherwise the GNU linker assumes the stack is
  ; executable by default.
@@ -566,7 +636,7 @@ index be59de311..bce0928f5 100644
  SECTION .note.GNU-stack noalloc noexec nowrite progbits
  %endif
  
-@@ -930,7 +1144,7 @@ SECTION .note.GNU-stack noalloc noexec nowrite progbits
+@@ -930,7 +1158,7 @@ SECTION .note.GNU-stack noalloc noexec nowrite progbits
  ; ym# is the corresponding ymm register if mmsize >= 32, otherwise the same as m#
  ; (All 3 remain in sync through SWAP.)
  
@@ -575,6 +645,54 @@ index be59de311..bce0928f5 100644
      %xdefine %1%2 %3
  %endmacro
  
+diff --git a/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm b/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
+index 91d24d760..52db60aaa 100644
+--- a/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
++++ b/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
+@@ -120,8 +120,7 @@ SECTION .text
+       %define g_pw_8m y_offsetm
+ 
+       ; Store bilin_filter and pw_8 location in stack
+-      GET_GOT eax
+-      add esp, 4                ; restore esp
++      GET_GOT_NO_SAVE eax
+ 
+       lea ecx, [GLOBAL(bilin_filter_m)]
+       mov g_bilin_filterm, ecx
+@@ -141,8 +140,7 @@ SECTION .text
+       %define g_pw_8m y_offsetm
+ 
+       ; Store bilin_filter and pw_8 location in stack
+-      GET_GOT eax
+-      add esp, 4                ; restore esp
++      GET_GOT_NO_SAVE eax
+ 
+       lea ecx, [GLOBAL(bilin_filter_m)]
+       mov g_bilin_filterm, ecx
+diff --git a/vpx_dsp/x86/subpel_variance_sse2.asm b/vpx_dsp/x86/subpel_variance_sse2.asm
+index 6d5c987e1..e82ead834 100644
+--- a/vpx_dsp/x86/subpel_variance_sse2.asm
++++ b/vpx_dsp/x86/subpel_variance_sse2.asm
+@@ -143,8 +143,7 @@ SECTION .text
+       %define g_pw_8m y_offsetm
+ 
+       ;Store bilin_filter and pw_8 location in stack
+-      GET_GOT eax
+-      add esp, 4                ; restore esp
++      GET_GOT_NO_SAVE eax
+ 
+       lea ecx, [GLOBAL(bilin_filter_m)]
+       mov g_bilin_filterm, ecx
+@@ -163,8 +162,7 @@ SECTION .text
+       %define g_pw_8m y_offsetm
+ 
+       ;Store bilin_filter and pw_8 location in stack
+-      GET_GOT eax
+-      add esp, 4                ; restore esp
++      GET_GOT_NO_SAVE eax
+ 
+       lea ecx, [GLOBAL(bilin_filter_m)]
+       mov g_bilin_filterm, ecx
 -- 
 2.16.4
 

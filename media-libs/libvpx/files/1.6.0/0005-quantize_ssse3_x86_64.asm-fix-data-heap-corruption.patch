@@ -1,7 +1,7 @@
 From 766109fe4b3bb38deea0912d499278cd88af1fec Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Tue, 11 Sep 2018 16:00:03 +0200
-Subject: [PATCH 05/13] quantize_ssse3_x86_64.asm: fix data/heap corruption
+Subject: [PATCH 05/14] quantize_ssse3_x86_64.asm: fix data/heap corruption
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

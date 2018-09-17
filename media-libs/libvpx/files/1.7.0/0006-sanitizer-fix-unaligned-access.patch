@@ -1,7 +1,7 @@
 From 361348c497c8e74b21c3924efae48054b7c2adf9 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Thu, 13 Sep 2018 05:20:21 +0200
-Subject: [PATCH 06/13] sanitizer: fix unaligned access
+Subject: [PATCH 06/14] sanitizer: fix unaligned access
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

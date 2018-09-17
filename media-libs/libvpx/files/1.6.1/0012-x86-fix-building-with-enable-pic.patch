@@ -1,7 +1,7 @@
-From 096b0d93b079935d7c60e01edd3200c3b0957f2f Mon Sep 17 00:00:00 2001
+From 55fe4c169754e039c54a62f343f86f4a61924eff Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 16 Sep 2018 15:11:27 +0200
-Subject: [PATCH 08/12] x86: fix building with --enable-pic
+Subject: [PATCH 12/16] x86: fix building with --enable-pic
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -9,38 +9,15 @@ Content-Transfer-Encoding: 8bit
 Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
 Change-Id: Iec68e5d9420b6c2ec69d94384abb8c92683c2593
 ---
- vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm | 30 +++++++++++++-----------
- vpx_dsp/x86/subpel_variance_sse2.asm             | 13 +++++++---
- 2 files changed, 26 insertions(+), 17 deletions(-)
+ vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm | 12 ++++++++++--
+ vpx_dsp/x86/subpel_variance_sse2.asm             | 13 ++++++++++---
+ 2 files changed, 20 insertions(+), 5 deletions(-)
 
 diff --git a/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm b/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
-index 93df92a9e..91d24d760 100644
+index 30ee81b68..3f4b22deb 100644
 --- a/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
 +++ b/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
-@@ -79,20 +79,13 @@ SECTION .text
- 
- %macro INC_SRC_BY_SRC_STRIDE  0
- %if ARCH_X86=1 && CONFIG_PIC=1
--  lea                srcq, [srcq + src_stridemp*2]
-+  add                srcq, src_stridemp
-+  add                srcq, src_stridemp
- %else
-   lea                srcq, [srcq + src_strideq*2]
- %endif
- %endmacro
- 
--%macro INC_SRC_BY_SRC_2STRIDE  0
--%if ARCH_X86=1 && CONFIG_PIC=1
--  lea                srcq, [srcq + src_stridemp*4]
--%else
--  lea                srcq, [srcq + src_strideq*4]
--%endif
--%endmacro
--
- %macro SUBPEL_VARIANCE 1-2 0 ; W
- %define bilin_filter_m bilin_filter_m_sse2
- %define filter_idx_shift 5
-@@ -118,10 +111,14 @@ SECTION .text
+@@ -111,10 +111,14 @@ SECTION .text
                                    x_offset, y_offset, \
                                    dst, dst_stride, \
                                    sec, sec_stride, \
@@ -54,9 +31,9 @@ index 93df92a9e..91d24d760 100644
 +      %define g_pw_8m y_offsetm
 +
        ; Store bilin_filter and pw_8 location in stack
-       GET_GOT eax
-       add esp, 4                ; restore esp
-@@ -136,9 +133,13 @@ SECTION .text
+       %if GET_GOT_DEFINED == 1
+         GET_GOT eax
+@@ -131,9 +135,13 @@ SECTION .text
      %else
        cglobal highbd_sub_pixel_variance%1xh, 7, 7, 13, src, src_stride, \
                                  x_offset, y_offset, dst, dst_stride, height, \
@@ -69,31 +46,10 @@ index 93df92a9e..91d24d760 100644
 +      %define g_pw_8m y_offsetm
 +
        ; Store bilin_filter and pw_8 location in stack
-       GET_GOT eax
-       add esp, 4                ; restore esp
-@@ -980,8 +981,9 @@ SECTION .text
- .x_other_y_other_loop:
-   movu                 m2, [srcq]
-   movu                 m4, [srcq+2]
--  movu                 m3, [srcq+src_strideq*2]
--  movu                 m5, [srcq+src_strideq*2+2]
-+  INC_SRC_BY_SRC_STRIDE
-+  movu                 m3, [srcq]
-+  movu                 m5, [srcq+2]
-   pmullw               m2, filter_x_a
-   pmullw               m4, filter_x_b
-   paddw                m2, filter_rnd
-@@ -1014,7 +1016,7 @@ SECTION .text
-   SUM_SSE              m0, m2, m4, m3, m6, m7
-   mova                 m0, m5
- 
--  INC_SRC_BY_SRC_2STRIDE
-+  INC_SRC_BY_SRC_STRIDE
-   lea                dstq, [dstq + dst_strideq * 4]
- %if %2 == 1 ; avg
-   add                secq, sec_str
+       %if GET_GOT_DEFINED == 1
+         GET_GOT eax
 diff --git a/vpx_dsp/x86/subpel_variance_sse2.asm b/vpx_dsp/x86/subpel_variance_sse2.asm
-index 05dcff75e..6d5c987e1 100644
+index cee4468c1..68c31b09a 100644
 --- a/vpx_dsp/x86/subpel_variance_sse2.asm
 +++ b/vpx_dsp/x86/subpel_variance_sse2.asm
 @@ -134,10 +134,14 @@ SECTION .text
@@ -110,9 +66,9 @@ index 05dcff75e..6d5c987e1 100644
 +      %define g_pw_8m y_offsetm
 +
        ;Store bilin_filter and pw_8 location in stack
-       GET_GOT eax
-       add esp, 4                ; restore esp
-@@ -151,10 +155,13 @@ SECTION .text
+       %if GET_GOT_DEFINED == 1
+         GET_GOT eax
+@@ -153,10 +157,13 @@ SECTION .text
        LOAD_IF_USED 0, 1         ; load eax, ecx back
      %else
        cglobal sub_pixel_variance%1xh, 7, 7, 13, src, src_stride, x_offset, \
@@ -126,8 +82,8 @@ index 05dcff75e..6d5c987e1 100644
 +      %define g_pw_8m y_offsetm
 +
        ;Store bilin_filter and pw_8 location in stack
-       GET_GOT eax
-       add esp, 4                ; restore esp
+       %if GET_GOT_DEFINED == 1
+         GET_GOT eax
 -- 
 2.16.4
 

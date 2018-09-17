@@ -1,4 +1,4 @@
-From 1b87441c718af75b82ca7e6b9a8d106d9e63fcdb Mon Sep 17 00:00:00 2001
+From f5716927f8cf9d3bf432972da4064f0040474e7b Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Thu, 13 Sep 2018 09:51:29 +0200
 Subject: [PATCH 10/12] x32 support: x86_abi_support.asm users

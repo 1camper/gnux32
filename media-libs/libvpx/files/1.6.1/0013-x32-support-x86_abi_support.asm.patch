@@ -1,7 +1,7 @@
-From b85a0ff611fb6eae2ad860dafc20c8a49e7bcf92 Mon Sep 17 00:00:00 2001
+From f25f549987841f5ac46ebc5c01a10fb3842c3d5b Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sun, 9 Sep 2018 22:51:20 +0200
-Subject: [PATCH 10/13] x32 support: x86_abi_support.asm
+Subject: [PATCH 13/16] x32 support: x86_abi_support.asm
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
