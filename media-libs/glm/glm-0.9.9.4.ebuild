@@ -1,7 +1,7 @@
-# Copyright 1999-2018 Gentoo Foundation
+# Copyright 1999-2019 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI=6
+EAPI=7
 
 inherit cmake-utils
 
@@ -11,17 +11,12 @@ SRC_URI="https://github.com/g-truc/glm/archive/${PV}.tar.gz -> ${P}.tar.gz"
 
 LICENSE="|| ( HappyBunny MIT )"
 SLOT="0"
-KEYWORDS="amd64 arm ~arm64 x86"
+KEYWORDS="~amd64 ~arm ~arm64 ~ppc64 ~x86"
 IUSE="test cpu_flags_x86_sse2 cpu_flags_x86_sse3 cpu_flags_x86_avx cpu_flags_x86_avx2"
 
 RDEPEND="virtual/opengl"
 
-PATCHES=(
-	"${FILESDIR}/glm-gcc73.patch"
-	"${FILESDIR}/${P}-gcc7_tests.patch"
-	"${FILESDIR}/${P}-x32-fix-model-test.patch"
-	"${FILESDIR}/${P}-printf-time-format.patch"
-)
+PATCHES=( "${FILESDIR}"/glm-x32-fix-model-test.patch )
 
 src_configure() {
 	if use test; then
