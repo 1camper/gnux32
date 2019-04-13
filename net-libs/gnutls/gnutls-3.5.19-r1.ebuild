@@ -1,17 +1,17 @@
 # Copyright 1999-2019 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI=6
+EAPI=7
 
-inherit libtool ltprune multilib-minimal versionator
+inherit libtool multilib-minimal
 
 DESCRIPTION="A TLS 1.2 and SSL 3.0 implementation for the GNU project"
 HOMEPAGE="http://www.gnutls.org/"
-SRC_URI="mirror://gnupg/gnutls/v$(get_version_component_range 1-2)/${P}.tar.xz"
+SRC_URI="mirror://gnupg/gnutls/v$(ver_cut 1-2)/${P}.tar.xz"
 
 LICENSE="GPL-3 LGPL-2.1"
 SLOT="0/30" # libgnutls.so number
-KEYWORDS="alpha amd64 arm arm64 hppa ia64 ~m68k ~mips ppc ppc64 s390 ~sh sparc x86 ~amd64-fbsd ~x86-fbsd ~amd64-linux ~x86-linux ~ppc-macos ~x64-macos ~x86-macos ~sparc-solaris ~sparc64-solaris ~x64-solaris ~x86-solaris"
+KEYWORDS="~alpha ~amd64 ~arm ~arm64 ~hppa ~ia64 ~m68k ~mips ~ppc ~ppc64 ~s390 ~sh ~sparc ~x86 ~amd64-fbsd ~x86-fbsd ~amd64-linux ~x86-linux ~ppc-macos ~x64-macos ~x86-macos ~sparc-solaris ~sparc64-solaris ~x64-solaris ~x86-solaris"
 IUSE="+cxx dane doc examples guile +idn nls openpgp +openssl pkcs11 seccomp sslv2 sslv3 static-libs test test-full +tls-heartbeat tools valgrind zlib"
 
 REQUIRED_USE="
@@ -23,23 +23,23 @@ RDEPEND=">=dev-libs/libtasn1-4.9:=[${MULTILIB_USEDEP}]
 	dev-libs/libunistring:=[${MULTILIB_USEDEP}]
 	>=dev-libs/nettle-3.1:=[gmp,${MULTILIB_USEDEP}]
 	>=dev-libs/gmp-5.1.3-r1:=[${MULTILIB_USEDEP}]
-	tools? ( sys-devel/autogen )
+	tools? ( sys-devel/autogen:= )
 	dane? ( >=net-dns/unbound-1.4.20:=[${MULTILIB_USEDEP}] )
-	guile? ( >=dev-scheme/guile-1.8:=[networking] )
-	nls? ( >=virtual/libintl-0-r1[${MULTILIB_USEDEP}] )
-	pkcs11? ( >=app-crypt/p11-kit-0.23.1[${MULTILIB_USEDEP}] )
-	zlib? ( >=sys-libs/zlib-1.2.8-r1[${MULTILIB_USEDEP}] )
+	guile? ( >=dev-scheme/guile-2:=[networking] )
+	nls? ( >=virtual/libintl-0-r1:=[${MULTILIB_USEDEP}] )
+	pkcs11? ( >=app-crypt/p11-kit-0.23.1:=[${MULTILIB_USEDEP}] )
+	zlib? ( >=sys-libs/zlib-1.2.8-r1:=[${MULTILIB_USEDEP}] )
 	idn? ( >=net-dns/libidn2-0.16-r1:=[${MULTILIB_USEDEP}] )"
 DEPEND="${RDEPEND}
-	>=virtual/pkgconfig-0-r1[${MULTILIB_USEDEP}]
-	doc? ( dev-util/gtk-doc )
-	nls? ( sys-devel/gettext )
-	valgrind? ( dev-util/valgrind )
 	test? (
 		seccomp? ( sys-libs/libseccomp )
-	)
+	)"
+BDEPEND=">=virtual/pkgconfig-0-r1
+	doc? ( dev-util/gtk-doc )
+	nls? ( sys-devel/gettext )
+	tools? ( sys-devel/autogen )
+	valgrind? ( dev-util/valgrind )
 	test-full? (
-		guile? ( >=dev-scheme/guile-2 )
 		app-crypt/dieharder
 		app-misc/datefudge
 		dev-libs/softhsm:2[-bindist]
@@ -84,10 +84,6 @@ src_prepare() {
 multilib_src_configure() {
 	LINGUAS="${LINGUAS//en/en@boldquot en@quot}"
 
-	# remove magic of library detection
-	# bug#438222
-	local libconf=($("${S}/configure" --help | grep -- '--without-.*-prefix' | sed -e 's/^ *\([^ ]*\) .*/\1/g'))
-
 	# TPM needs to be tested before being enabled
 	libconf+=( --without-tpm )
 
@@ -122,14 +118,16 @@ multilib_src_configure() {
 		$(use_with idn) \
 		$(use_with pkcs11 p11-kit) \
 		$(use_with zlib) \
+		--disable-rpath \
 		--with-unbound-root-key-file="${EPREFIX}/etc/dnssec/root-anchors.txt" \
 		--without-included-libtasn1 \
-		"${libconf[@]}"
+		"${libconf[@]}" \
+		$("${S}/configure" --help | grep -- '--without-.*-prefix' | sed -e 's/^ *\([^ ]*\) .*/\1/g')
 }
 
 multilib_src_install_all() {
 	einstalldocs
-	prune_libtool_files --all
+	find "${D}" -name '*.la' -delete || die
 
 	if use examples; then
 		docinto examples
