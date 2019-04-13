@@ -74,7 +74,7 @@ https://bugs.gentoo.org/664058
      sal_uInt64 * pRegisterReturn /* space for register return */ )
  {
      unsigned int nr_gpr = 0; //number of gpr registers used
-@@ -233,7 +233,7 @@
+@@ -234,7 +234,7 @@
                  uno_destructData( pUnoReturn, pReturnTypeDescr, nullptr );
              }
              // complex return ptr is set to return reg
@@ -83,7 +83,7 @@ https://bugs.gentoo.org/664058
          }
          if ( pReturnTypeDescr )
          {
-@@ -249,7 +249,7 @@
+@@ -250,7 +250,7 @@
  
  typelib_TypeClass cpp_vtable_call(
      sal_Int32 nFunctionIndex, sal_Int32 nVtableOffset,
@@ -92,7 +92,7 @@ https://bugs.gentoo.org/664058
      sal_uInt64 * pRegisterReturn /* space for register return */ )
  {
      // gpreg:  [ret *], this, [other gpr params]
-@@ -356,7 +356,7 @@
+@@ -357,7 +357,7 @@
                              pInterface->release();
                              TYPELIB_DANGER_RELEASE( pTD );
  
@@ -101,7 +101,7 @@ https://bugs.gentoo.org/664058
                              eRet = typelib_TypeClass_ANY;
                              break;
                          }
-@@ -388,7 +388,7 @@
+@@ -389,7 +389,7 @@
      return eRet;
  }
  
@@ -110,19 +110,19 @@ https://bugs.gentoo.org/664058
  
  // Generate a trampoline that redirects method calls to
  // privateSnippetExecutor().
-@@ -400,7 +400,11 @@
+@@ -401,7 +401,11 @@
  // Note: The code snippet we build here must not create a stack frame,
  // otherwise the UNO exceptions stop working thanks to non-existing
  // unwinding info.
 +#ifdef __ILP32__
-+unsigned char * codeSnippet( unsigned char * code, sal_PtrDiff writetoexecdiff,
++static unsigned char * codeSnippet( unsigned char * code, sal_PtrDiff writetoexecdiff,
 +#else
- unsigned char * codeSnippet( unsigned char * code,
+ static unsigned char * codeSnippet( unsigned char * code,
 +#endif
          sal_Int32 nFunctionIndex, sal_Int32 nVtableOffset,
          bool bHasHiddenParam )
  {
-@@ -415,6 +419,13 @@
+@@ -416,6 +420,13 @@
      *reinterpret_cast<sal_uInt32 *>( code + 4 ) = nOffsetAndIndex >> 16;
      *reinterpret_cast<sal_uInt16 *>( code + 8 ) = nOffsetAndIndex >> 48;
  
@@ -136,7 +136,7 @@ https://bugs.gentoo.org/664058
      // movq $<address of the privateSnippetExecutor>, %r11
      *reinterpret_cast<sal_uInt16 *>( code + 10 ) = 0xbb49;
      *reinterpret_cast<sal_uInt32 *>( code + 12 )
-@@ -424,6 +435,7 @@
+@@ -425,6 +436,7 @@
  
      // jmpq *%r11
      *reinterpret_cast<sal_uInt32 *>( code + 20 ) = 0x00e3ff49;
@@ -144,7 +144,7 @@ https://bugs.gentoo.org/664058
  
  #if OSL_DEBUG_LEVEL > 1
      fprintf(stderr,
-@@ -486,14 +498,22 @@
+@@ -487,14 +499,22 @@
  
              // get method
              (s++)->fn = code + writetoexecdiff;
@@ -167,7 +167,7 @@ https://bugs.gentoo.org/664058
              }
          }
          else if ( pTD->eTypeClass == typelib_TypeClass_INTERFACE_METHOD )
-@@ -502,7 +522,11 @@
+@@ -503,7 +523,11 @@
                  reinterpret_cast<typelib_InterfaceMethodTypeDescription *>( pTD );
  
              (s++)->fn = code + writetoexecdiff;
