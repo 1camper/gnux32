@@ -13,7 +13,7 @@ SRC_URI="mirror://nongnu/libunwind/${MY_P}.tar.gz"
 
 LICENSE="MIT"
 SLOT="7"
-KEYWORDS="amd64 arm arm64 hppa ia64 ~mips ppc ppc64 -sparc x86 ~amd64-fbsd ~x86-fbsd ~amd64-linux ~x86-linux"
+KEYWORDS="~amd64 ~arm ~arm64 ~hppa ~ia64 ~mips ~ppc ~ppc64 -sparc ~x86 ~amd64-fbsd ~x86-fbsd ~amd64-linux ~x86-linux"
 IUSE="debug debug-frame doc libatomic lzma +static-libs"
 
 RESTRICT="test" # half of tests are broken (toolchain version dependent)
@@ -50,6 +50,7 @@ PATCHES=(
 	"${FILESDIR}"/${PN}-1.2.1-fix_version_macros.patch
 	"${FILESDIR}"/${PN}-1.2.1-only-include-execinfo_h-if-avaliable.patch
 	"${FILESDIR}"/${PN}-1.2.1-no-PROTECTED.patch #659732
+	"${FILESDIR}"/${PN}-1.2.1-arm-__asm__.patch #635674
 	"${FILESDIR}"/${PN}-1.2.1-x32-inline-asm.patch
 )
 
