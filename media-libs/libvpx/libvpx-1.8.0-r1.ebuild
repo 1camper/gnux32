@@ -1,7 +1,7 @@
-# Copyright 1999-2018 Gentoo Authors
+# Copyright 1999-2019 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI=6
+EAPI="7"
 inherit toolchain-funcs multilib-minimal
 
 # To create a new testdata tarball:
@@ -9,9 +9,9 @@ inherit toolchain-funcs multilib-minimal
 # 2. export LIBVPX_TEST_DATA_PATH=libvpx-testdata
 # 3. configure --enable-unit-tests --enable-vp9-highbitdepth
 # 4. make testdata
-# 5. tar -cjf libvpx-testdata-${MY_PV}.tar.bz2 libvpx-testdata
+# 5. tar -cjf libvpx-testdata-${MY_PV}.tar.xz libvpx-testdata
 
-LIBVPX_TESTDATA_VER=1.7.0
+LIBVPX_TESTDATA_VER=1.8.0
 
 DESCRIPTION="WebM VP8 and VP9 Codec SDK"
 HOMEPAGE="https://www.webmproject.org"
@@ -19,15 +19,11 @@ SRC_URI="https://github.com/webmproject/${PN}/archive/v${PV}.tar.gz -> ${P}.tar.
 	test? ( mirror://gentoo/${PN}-testdata-${LIBVPX_TESTDATA_VER}.tar.xz )"
 
 LICENSE="BSD"
-SLOT="0/5"
+SLOT="0/6"
 KEYWORDS="~alpha ~amd64 ~arm ~arm64 ~hppa ~ia64 ~ppc ~ppc64 ~s390 ~sparc ~x86 ~amd64-fbsd ~x86-fbsd ~amd64-linux ~x86-linux"
-IUSE="cpu_flags_x86_avx cpu_flags_x86_avx2 doc cpu_flags_x86_mmx postproc cpu_flags_x86_sse cpu_flags_x86_sse2 cpu_flags_x86_sse3 cpu_flags_x86_ssse3 cpu_flags_x86_sse4_1 +highbitdepth static-libs svc test +threads"
+IUSE="doc +highbitdepth postproc static-libs svc test +threads"
 
-REQUIRED_USE="
-	cpu_flags_x86_sse2? ( cpu_flags_x86_mmx )
-	cpu_flags_x86_ssse3? ( cpu_flags_x86_sse2 )
-	test? ( threads )
-"
+REQUIRED_USE="test? ( threads )"
 
 # Disable test phase when USE="-test"
 RESTRICT="!test? ( test )"
@@ -47,20 +43,12 @@ DEPEND="abi_x86_32? ( dev-lang/yasm )
 PATCHES=(
 	"${FILESDIR}/libvpx-1.3.0-sparc-configure.patch" # 501010
 
-	"${FILESDIR}/${PV}/0001-sanitizer-fix-integer-overflow.patch"
-	"${FILESDIR}/${PV}/0002-sanitizer-don-t-call-non-static-function-for-non-exi.patch"
-	"${FILESDIR}/${PV}/0003-valgrind-fix-using-unitialized-memory-memleak.patch"
-	"${FILESDIR}/${PV}/0004-valgrind-fix-uninitialized-memory.patch"
-	"${FILESDIR}/${PV}/0005-segfault-fix-unaligned-access.patch"
-	"${FILESDIR}/${PV}/0006-sanitizer-fix-unaligned-access.patch"
-	"${FILESDIR}/${PV}/0007-sanitizer-fix-unaligned-memory-access.patch"
-	"${FILESDIR}/${PV}/0008-sanitizer-fix-out-of-bounds-access.patch"
-	"${FILESDIR}/${PV}/0009-fix-segfault-in-DatarateOnePassCbrSvcSingleBR-test.patch"
-	"${FILESDIR}/${PV}/0010-x86-fix-building-with-enable-pic.patch"
-	"${FILESDIR}/${PV}/0011-x32-support-x86_abi_support.asm.patch"
-	"${FILESDIR}/${PV}/0012-x32-support-x86_abi_support.asm-users.patch"
-	"${FILESDIR}/${PV}/0013-x32-support-x86inc.asm.patch"
-	"${FILESDIR}/${PV}/0014-x32-support-x86inc.asm-users.patch"
+	# x32
+	"${FILESDIR}/${PV}/0001-x32-support.patch"
+	"${FILESDIR}/${PV}/0002-fix-out-of-bounds-access-in-fs_downsample_level.patch"
+	"${FILESDIR}/${PV}/0003-fix-integer-overflow-in-v9_rdopt.c-missing-emms.patch"
+	"${FILESDIR}/${PV}/0004-fix-missing-emms.patch"
+	"${FILESDIR}/${PV}/0005-fix-integer-overflow-in-similarity.patch"
 )
 
 src_configure() {
@@ -86,17 +74,9 @@ multilib_src_configure() {
 		--enable-vp9
 		--enable-shared
 		--extra-cflags="${CFLAGS}"
-		--disable-optimizations \
-		$(use_enable cpu_flags_x86_avx avx)
-		$(use_enable cpu_flags_x86_avx2 avx2)
-		$(use_enable cpu_flags_x86_mmx mmx)
+		--disable-optimizations
 		$(use_enable postproc)
-		$(use cpu_flags_x86_sse2 && use_enable cpu_flags_x86_sse sse || echo --disable-sse)
-		$(use_enable cpu_flags_x86_sse2 sse2)
-		$(use_enable cpu_flags_x86_sse3 sse3)
-		$(use_enable cpu_flags_x86_sse4_1 sse4_1)
-		$(use_enable cpu_flags_x86_ssse3 ssse3)
-		$(use_enable svc experimental) $(use_enable svc spatial-svc)
+		$(use_enable svc experimental)
 		$(use_enable static-libs static)
 		$(use_enable test unit-tests)
 		$(use_enable threads multithread)
@@ -123,6 +103,7 @@ multilib_src_configure() {
 		myconfargs+=( --disable-examples --disable-install-docs --disable-docs )
 	fi
 
+	echo "${S}"/configure "${myconfargs[@]}" >&2
 	"${S}"/configure "${myconfargs[@]}"
 }
 

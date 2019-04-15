@@ -1,0 +1,2099 @@
+From e08ac7b57e5b0ea8bec281bcd5bd888b699ad257 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Fri, 21 Sep 2018 00:36:12 +0200
+Subject: [PATCH 1/5] x32 support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+95% of the changes needed are to ensure that pointers and
+ptrdiff_t arguments are loaded correctly in assembler code. Doing
+this by hand (adding movsxdifnidn all over the place) is tedious
+und error prone, thus extending the cglobal syntax to include type
+information makes some sense.
+
+The current version is an ad hoc attempt, it certainly works but
+could benefit from a cleanup. Trying to apply it to ffmpeg code
+also shows that some additional functionality is desirable.
+Some of the functions there also pass floating point values to asm so
+they end up %ifdef-ing a lot to account for differences between SYSV
+and MSABI - which cgloabl is meant to abstract away from.
+
+As a side benefit to these changes x86 builds should be slightly
+faster, currently a few functions save the GOT register twice
+(or once for non-pic builds when its not even used).
+
+x86_abi_support.asm users are easier to handle, there are no
+ptrdiff_t arguments, so presumably sign extension issues are already
+being dealt with; the ABI specifies that pointers passed in registers
+are zero-extended already, so one only has to grep and check for any
+arg([6789]) lines and change as needed.
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: Id2f376574d9d0147f06c1da48af62cca5db8d3d7
+---
+ third_party/x86inc/x86inc.asm                 | 335 +++++++++++++++---
+ vp8/common/x86/subpixel_mmx.asm               |   4 +-
+ vp8/common/x86/subpixel_sse2.asm              |   8 +-
+ .../x86/temporal_filter_apply_sse2.asm        |   4 +-
+ vp9/encoder/x86/vp9_dct_sse2.asm              |   2 +-
+ vp9/encoder/x86/vp9_error_sse2.asm            |   4 +-
+ vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm |  24 +-
+ vpx_dsp/x86/avg_ssse3_x86_64.asm              |   2 +-
+ vpx_dsp/x86/fwd_txfm_ssse3_x86_64.asm         |   2 +-
+ vpx_dsp/x86/highbd_intrapred_sse2.asm         |  24 +-
+ vpx_dsp/x86/highbd_sad4d_sse2.asm             |  22 +-
+ vpx_dsp/x86/highbd_sad_sse2.asm               |  20 +-
+ .../x86/highbd_subpel_variance_impl_sse2.asm  |  72 ++--
+ vpx_dsp/x86/intrapred_sse2.asm                |  78 ++--
+ vpx_dsp/x86/intrapred_ssse3.asm               |  26 +-
+ vpx_dsp/x86/inv_wht_sse2.asm                  |   2 +-
+ vpx_dsp/x86/sad4d_sse2.asm                    |  24 +-
+ vpx_dsp/x86/sad_sse2.asm                      |  19 +-
+ vpx_dsp/x86/ssim_opt_x86_64.asm               |  12 +-
+ vpx_dsp/x86/subpel_variance_sse2.asm          |  72 ++--
+ vpx_dsp/x86/subtract_sse2.asm                 |  31 +-
+ vpx_dsp/x86/vpx_convolve_copy_sse2.asm        |  12 +-
+ vpx_dsp/x86/vpx_subpixel_8t_ssse3.asm         |  15 +-
+ vpx_ports/x86_abi_support.asm                 |  57 ++-
+ 24 files changed, 581 insertions(+), 290 deletions(-)
+
+diff --git a/third_party/x86inc/x86inc.asm b/third_party/x86inc/x86inc.asm
+index b647dff2f..9955f5e1a 100644
+--- a/third_party/x86inc/x86inc.asm
++++ b/third_party/x86inc/x86inc.asm
+@@ -67,10 +67,14 @@
+ %endif
+ 
+ %define FORMAT_ELF 0
++%define ABI_X32 0
+ %ifidn __OUTPUT_FORMAT__,elf
+     %define FORMAT_ELF 1
+ %elifidn __OUTPUT_FORMAT__,elf32
+     %define FORMAT_ELF 1
++%elifidn __OUTPUT_FORMAT__,elfx32
++    %define FORMAT_ELF 1
++    %define ABI_X32 1
+ %elifidn __OUTPUT_FORMAT__,elf64
+     %define FORMAT_ELF 1
+ %endif
+@@ -132,9 +136,8 @@
+         %ifidn __OUTPUT_FORMAT__,elf32
+             %define GET_GOT_DEFINED 1
+             %define WRT_PLT wrt ..plt
+-            %macro GET_GOT 1
++            %macro GET_GOT_NO_SAVE 1
+                 extern _GLOBAL_OFFSET_TABLE_
+-                push %1
+                 call %%get_got
+                 %%sub_offset:
+                 jmp %%exitGG
+@@ -143,22 +146,27 @@
+                 add %1, _GLOBAL_OFFSET_TABLE_ + $$ - %%sub_offset wrt ..gotpc
+                 ret
+                 %%exitGG:
+-                %undef GLOBAL
+                 %define GLOBAL(x) x + %1 wrt ..gotoff
+-                %undef RESTORE_GOT
+-                %define RESTORE_GOT pop %1
++                %define RESTORE_GOT
++            %endmacro
++            %macro GET_GOT 1
++                PUSH %1
++                GET_GOT_NO_SAVE %1
++                %define RESTORE_GOT POP %1
+             %endmacro
+         %elifidn __OUTPUT_FORMAT__,macho32
+             %define GET_GOT_DEFINED 1
+-            %macro GET_GOT 1
+-                push %1
++            %macro GET_GOT_NO_SAVE 1
+                 call %%get_got
+                 %%get_got:
+                 pop  %1
+-                %undef GLOBAL
+                 %define GLOBAL(x) x + %1 - %%get_got
+-                %undef RESTORE_GOT
+-                %define RESTORE_GOT pop %1
++                %define RESTORE_GOT
++            %endmacro
++            %macro GET_GOT 1
++                PUSH %1
++                GET_GOT_NO_SAVE %1
++                %define RESTORE_GOT POP %1
+             %endmacro
+         %else
+             %define GET_GOT_DEFINED 0
+@@ -170,6 +178,8 @@
+     %endif
+ 
+ %else
++    %macro GET_GOT_NO_SAVE 1
++    %endmacro
+     %macro GET_GOT 1
+     %endmacro
+     %define GLOBAL(x) rel x
+@@ -185,6 +195,8 @@
+ %endif
+ 
+ %ifnmacro GET_GOT
++    %macro GET_GOT_NO_SAVE 1
++    %endmacro
+     %macro GET_GOT 1
+     %endmacro
+     %define GLOBAL(x) x
+@@ -232,10 +244,45 @@
+ ; declares a function (foo) that automatically loads two arguments (dst and
+ ; src) into registers, uses one additional register (tmp) plus 7 vector
+ ; registers (m0-m6) and allocates 0x40 bytes of stack space.
+-
+-; TODO Some functions can use some args directly from the stack. If they're the
+-; last args then you can just not declare them, but if they're in the middle
+-; we need more flexible macro.
++;
++; The names in the list to can optionally be preceded by type-specifiers, which
++; are strings of up to 3 characters: type [extend] [delay].
++; type declares the size of the the argument:
++; 'b' byte size (int8_t)
++; 'w' word size (int16_t)
++; 'd' dword size (int32_t)
++; 'q' qword size (int64_t)
++; 'p' pointer size (T*, size_t, ptrdiff_t, intptr_t, uintptr_t)
++; extend specifies how the register is to be loaded from the passed argument
++; by PROLOGUE or LOAD_ARG:
++; if omitted:
++;     The argument is loaded using mov of appropriate size if passed on the stack.
++;     No action is taken if the argument is already present in a register.
++;     That means that while smaller types are passed as if being promoted to int
++;     first, that while the lower 32 bits of a 64 register/stack argument are
++;     determined by the value of the argument, the same is not true for the upper
++;     32 bits unless the argument had 64 bit size originally, except that with the
++;     x32 ABI, pointers that were passed by register, will have the upper half
++;     of the register cleared, so that 64-bit adressing mode can be used.
++; '+' the argument is zero extended to register size if smaller
++; '-' the argument is sign extended to register size if smaller
++; delay
++; '*' the register will not be loaded by PROLOGUE
++;
++; cheat sheet: typical specifiers for certain types:
++; "b+" uint8_t
++; "b-" int8_t
++; "w+" uint16_t
++; "w-" int16_t
++; "d+" uint32_t
++; "d-" int32_t
++; "q+" uint64_t
++; "q-" int64_t
++; "p+" size_t, uintptr_t
++; "p-" ptrdiff_t, intptr_t
++; +/- should be omitted if the the 64-bit register is never used or if the argument
++;     is extended later
++; pointers always use just "p"
+ 
+ ; RET:
+ ; Pops anything that was pushed by PROLOGUE, and returns.
+@@ -245,27 +292,48 @@
+ 
+ ; registers:
+ ; rN and rNq are the native-size register holding function argument N
+-; rNd, rNw, rNb are dword, word, and byte size
++; rNp, rNd, rNw, rNb are pointer, dword, word, and byte size
+ ; rNh is the high 8 bits of the word size
+ ; rNm is the original location of arg N (a register or on the stack), dword
+-; rNmp is native size
++; rNmp, rNmq are pointer and native size
++
++%macro DECLARE_MEM_REG 1-2
++    %if %0 == 2
++        %assign r%1_mem_reg_off %2
++    %else
++        %assign r%1_mem_reg_off r %+ declare_mem_reg_last %+ _mem_reg_off + gprsize
++    %endif
++    %define r%1m [rstk + stack_offset + r %+ %1 %+ _mem_reg_off]
++    %define r%1md dword r %+ %1 %+ m
++    %define r%1mp pword r %+ %1 %+ m
++    %if ARCH_X86_64
++        %define r%1mq qword r %+ %1 %+ m
++    %else
++        %define r%1mq dword r %+ %1 %+ m
++    %endif
++    %assign declare_mem_reg_last %1
++%endmacro
+ 
+ %macro DECLARE_REG 2-3
+     %define r%1q %2
++    %define r%1p %2p
+     %define r%1d %2d
+     %define r%1w %2w
+     %define r%1b %2b
+     %define r%1h %2h
+     %define %2q %2
++    %if ABI_X32
++        %define %2p %2d
++    %else
++        %define %2p %2
++    %endif
+     %if %0 == 2
+         %define r%1m  %2d
+-        %define r%1mp %2
+-    %elif ARCH_X86_64 ; memory
+-        %define r%1m [rstk + stack_offset + %3]
+-        %define r%1mp qword r %+ %1 %+ m
++        %define r%1md %2d
++        %define r%1mp %2p
++        %define r%1mq %2
+     %else
+-        %define r%1m [rstk + stack_offset + %3]
+-        %define r%1mp dword r %+ %1 %+ m
++        DECLARE_MEM_REG %1, %3
+     %endif
+     %define r%1  %2
+ %endmacro
+@@ -281,6 +349,13 @@
+     %define e%1h %3
+     %define r%1b %2
+     %define e%1b %2
++    %if ABI_X32
++        %define r%1p e%1
++        %define e%1p e%1
++    %else
++        %define r%1p r%1
++        %define e%1p r%1
++    %endif
+     %if ARCH_X86_64 == 0
+         %define r%1 e%1
+     %endif
+@@ -293,6 +368,7 @@ DECLARE_REG_SIZE dx, dl, dh
+ DECLARE_REG_SIZE si, sil, null
+ DECLARE_REG_SIZE di, dil, null
+ DECLARE_REG_SIZE bp, bpl, null
++DECLARE_REG_SIZE sp, spl, null
+ 
+ ; t# defines for when per-arch register allocation is more complex than just function arguments
+ 
+@@ -308,6 +384,7 @@ DECLARE_REG_SIZE bp, bpl, null
+ %macro DECLARE_REG_TMP_SIZE 0-*
+     %rep %0
+         %define t%1q t%1 %+ q
++        %define t%1p t%1 %+ p
+         %define t%1d t%1 %+ d
+         %define t%1w t%1 %+ w
+         %define t%1h t%1 %+ h
+@@ -324,6 +401,18 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     %define gprsize 4
+ %endif
+ 
++%if ARCH_X86_64 && ABI_X32 == 0
++    %define ptrsize 8
++    %define pword qword
++    %define resp resq
++    %define dp dq
++%else
++    %define ptrsize 4
++    %define pword dword
++    %define resp resd
++    %define dp dd
++%endif
++
+ %macro PUSH 1
+     push %1
+     %ifidn rstk, rsp
+@@ -359,7 +448,25 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+ %macro LOAD_IF_USED 1-*
+     %rep %0
+         %if %1 < num_args
+-            mov r%1, r %+ %1 %+ mp
++            %if argload_delayed_%1 == 0
++                argload_%1
++            %endif
++        %endif
++        %rotate 1
++    %endrep
++%endmacro
++
++%macro LOAD_ARG 1-*
++    %rep %0
++        %ifnum %1
++            %assign %%i %1
++        %else
++            %assign %%i %1 %+ _reg_num
++        %endif
++        %if %%i < regs_used
++            argload_ %+ %%i
++        %else
++            %error "argument not in regs used <regs_used>"
+         %endif
+         %rotate 1
+     %endrep
+@@ -369,6 +476,8 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     sub %1, %2
+     %ifidn %1, rstk
+         %assign stack_offset stack_offset+(%2)
++    %elifidn %1, rstkp
++        %assign stack_offset stack_offset+(%2)
+     %endif
+ %endmacro
+ 
+@@ -376,6 +485,8 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     add %1, %2
+     %ifidn %1, rstk
+         %assign stack_offset stack_offset-(%2)
++    %elifidn %1, rstkp
++        %assign stack_offset stack_offset-(%2)
+     %endif
+ %endmacro
+ 
+@@ -402,12 +513,18 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+         %assign %%i 0
+         %rep n_arg_names
+             CAT_UNDEF arg_name %+ %%i, q
++            CAT_UNDEF arg_name %+ %%i, p
+             CAT_UNDEF arg_name %+ %%i, d
+             CAT_UNDEF arg_name %+ %%i, w
+             CAT_UNDEF arg_name %+ %%i, h
+             CAT_UNDEF arg_name %+ %%i, b
+             CAT_UNDEF arg_name %+ %%i, m
++            CAT_UNDEF arg_name %+ %%i, md
+             CAT_UNDEF arg_name %+ %%i, mp
++            CAT_UNDEF arg_name %+ %%i, mq
++            CAT_UNDEF arg_name %+ %%i, _
++            CAT_UNDEF arg_name %+ %%i, _reg_num
++            CAT_UNDEF arg_name %+ %%i, _src_num
+             CAT_UNDEF arg_name, %%i
+             %assign %%i %%i+1
+         %endrep
+@@ -416,22 +533,135 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     %xdefine %%stack_offset stack_offset
+     %undef stack_offset ; so that the current value of stack_offset doesn't get baked in by xdefine
+     %assign %%i 0
++    %assign %%argsize gprsize
++    %define %%loadinsn movifnidn
++    %define %%loaddst q
++    %define %%loadsrc mq
++    %define %%suffix q
++    %assign %%delayload 0
+     %rep %0
+-        %xdefine %1q r %+ %%i %+ q
+-        %xdefine %1d r %+ %%i %+ d
+-        %xdefine %1w r %+ %%i %+ w
+-        %xdefine %1h r %+ %%i %+ h
+-        %xdefine %1b r %+ %%i %+ b
+-        %xdefine %1m r %+ %%i %+ m
+-        %xdefine %1mp r %+ %%i %+ mp
+-        CAT_XDEFINE arg_name, %%i, %1
+-        %assign %%i %%i+1
++        CAT_XDEFINE argload_insn, %%i, %%loadinsn
++        CAT_XDEFINE argload_dst, %%i, %%loaddst
++        CAT_XDEFINE argload_src, %%i, %%loadsrc
++        CAT_XDEFINE argload_, %%i, %%loadinsn r %+ %%i %+ %%loaddst , r %+ %%i %+ %%loadsrc
++        CAT_XDEFINE argload_delayed_, %%i, %%delayload
++        CAT_XDEFINE argsuffix_, %%i, %%suffix
++        %ifstr %1
++            %strlen %%count %1
++            ASSERT %%count <= 3
++            %substr %%size %1 1
++            %assign %%argsize 4
++            %if (%%size == 'b' )
++                %define %%suffix b
++            %elif (%%size == 'w' )
++                %define %%suffix w
++            %elif (%%size == 'd' )
++                %define %%suffix d
++            %elif (%%size == 'p' )
++                %define %%suffix p
++                %assign %%argsize ptrsize
++            %elif (%%size == 'q' )
++                %define %%suffix q
++                %assign %%argsize gprsize
++            %else
++                %error "unknown argument type!"
++            %endif
++            %assign %%delayload 0
++            %substr %%sign %1 2
++            %define %%loadinsn movifnidn
++            %define %%loaddst q
++            %define %%loadsrc mq
++            %if %%argsize != gprsize
++                %define %%loaddst d
++                %define %%loadsrc md
++            %endif
++            %if %%sign == '+'
++                %if %%argsize != gprsize
++                    %define %%loadinsn mov
++                %endif
++            %elif %%sign == '-'
++                %if %%argsize != gprsize
++                    %define %%loadinsn movsxd
++                    %define %%loaddst q
++                %endif
++            %elif %%sign == '*'
++                %assign %%delayload 1
++            %elif %%sign == ''
++            %else
++                %error "unknown sign extension!"
++            %endif
++            %if %%count == 3
++                %substr %%delay %1 3
++                ASSERT %%delay == '*'
++                %assign %%delayload 1
++            %endif
++        %else
++            %if %%i > declare_mem_reg_last
++                DECLARE_MEM_REG %%i
++            %endif
++            CAT_XDEFINE arg_name, %%i, %1
++            %xdefine %1q  r %+ %%i %+ q
++            %xdefine %1p  r %+ %%i %+ p
++            %xdefine %1d  r %+ %%i %+ d
++            %xdefine %1w  r %+ %%i %+ w
++            %xdefine %1h  r %+ %%i %+ h
++            %xdefine %1b  r %+ %%i %+ b
++            %xdefine %1m  r %+ %%i %+ m
++            %xdefine %1md r %+ %%i %+ md
++            %xdefine %1mp r %+ %%i %+ mp
++            %xdefine %1mq r %+ %%i %+ mq
++            %xdefine %1_  r %+ %%i %+ %%suffix
++            %xdefine %1_reg_num %%i
++            %xdefine %1_src_num %%i
++
++            %assign %%i %%i+1
++            %assign %%argsize 4
++            %define %%loadinsn movifnidn
++            %define %%loaddst q
++            %define %%loadsrc mq
++        %endif
+         %rotate 1
+     %endrep
+     %xdefine stack_offset %%stack_offset
+     %assign n_arg_names %0
+ %endmacro
+ 
++; Assigns a named argument to a particular register, identified
++; by number or argument name
++%macro ASSIGN_ARG 2 ; arg_name, #reg_num|old_arg_name
++    %ifnum %2
++        %ifidn r%2q,%1 %+ q
++            %xdefine __err__ %1
++            %error "self assignment __err__"
++        %endif
++        %assign %%i %2
++    %else
++        %ifidn %2q,%1 %+ q
++            %xdefine __err__ %1
++            %error "self assignment: __err__"
++        %endif
++        %assign %%i %2 %+ _reg_num
++    %endif
++    %assign %%j %1 %+ _reg_num
++    %assign %%k %1 %+ _src_num
++    %xdefine %%suffix argsuffix_ %+ %%j
++    %xdefine %1q r %+ %%i %+ q
++    %xdefine %1p r %+ %%i %+ p
++    %xdefine %1d r %+ %%i %+ d
++    %xdefine %1w r %+ %%i %+ w
++    %xdefine %1h r %+ %%i %+ h
++    %xdefine %1b r %+ %%i %+ b
++    %xdefine %1_ r %+ %%i %+ %%suffix
++    %xdefine %1_reg_num %%i
++    %xdefine %%loadinsn argload_insn %+ %%j
++    %xdefine %%loaddst argload_dst %+ %%j
++    %xdefine %%loadsrc argload_src %+ %%k
++    CAT_XDEFINE argsuffix_, %%i, argsuffix_ %+ %%j
++    CAT_XDEFINE argload_insn, %%i, %%loadinsn
++    CAT_XDEFINE argload_dst, %%i, %%loaddst
++    CAT_XDEFINE argload_, %%i, %%loadinsn r %+ %%i %+ %%loaddst , r %+ %%k %+ %%loadsrc
++%endmacro
++
+ %define required_stack_alignment ((mmsize + 15) & ~15)
+ 
+ %macro ALLOC_STACK 1-2 0 ; stack_size, n_xmm_regs (for win64 only)
+@@ -454,25 +684,26 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+             %if required_stack_alignment <= STACK_ALIGNMENT
+                 ; maintain the current stack alignment
+                 %assign stack_size_padded stack_size + %%pad + ((-%%pad-stack_offset-gprsize) & (STACK_ALIGNMENT-1))
+-                SUB rsp, stack_size_padded
++                SUB rspp, stack_size_padded
+             %else
+                 %assign %%reg_num (regs_used - 1)
+                 %xdefine rstk r %+ %%reg_num
++                %xdefine rstkp r %+ %%reg_num %+ p
+                 ; align stack, and save original stack location directly above
+                 ; it, i.e. in [rsp+stack_size_padded], so we can restore the
+-                ; stack in a single instruction (i.e. mov rsp, rstk or mov
+-                ; rsp, [rsp+stack_size_padded])
++                ; stack in a single instruction (i.e. mov rspp, rstkp or mov
++                ; rspp, [rsp+stack_size_padded])
+                 %if %1 < 0 ; need to store rsp on stack
+                     %xdefine rstkm [rsp + stack_size + %%pad]
+                     %assign %%pad %%pad + gprsize
+                 %else ; can keep rsp in rstk during whole function
+-                    %xdefine rstkm rstk
++                    %xdefine rstkm rstkp
+                 %endif
+                 %assign stack_size_padded stack_size + ((%%pad + required_stack_alignment-1) & ~(required_stack_alignment-1))
+-                mov rstk, rsp
+-                and rsp, ~(required_stack_alignment-1)
+-                sub rsp, stack_size_padded
+-                movifnidn rstkm, rstk
++                mov rstkp, rspp
++                and rspp, ~(required_stack_alignment-1)
++                sub rspp, stack_size_padded
++                movifnidn rstkm, rstkp
+             %endif
+             WIN64_PUSH_XMM
+         %endif
+@@ -532,8 +763,8 @@ DECLARE_REG 14, R15, 120
+     %if mmsize != 8 && stack_size == 0
+         WIN64_SPILL_XMM %3
+     %endif
+-    LOAD_IF_USED 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
+     DEFINE_ARGS_INTERNAL %0, %4, %5
++    LOAD_IF_USED 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
+ %endmacro
+ 
+ %macro WIN64_PUSH_XMM 0
+@@ -633,8 +864,8 @@ DECLARE_REG 14, R15, 72
+     ASSERT regs_used <= 15
+     PUSH_IF_USED 9, 10, 11, 12, 13, 14
+     ALLOC_STACK %4
+-    LOAD_IF_USED 6, 7, 8, 9, 10, 11, 12, 13, 14
+     DEFINE_ARGS_INTERNAL %0, %4, %5
++    LOAD_IF_USED 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
+ %endmacro
+ 
+ %define has_epilogue regs_used > 9 || mmsize == 32 || stack_size > 0
+@@ -642,9 +873,9 @@ DECLARE_REG 14, R15, 72
+ %macro RET 0
+     %if stack_size_padded > 0
+         %if required_stack_alignment > STACK_ALIGNMENT
+-            mov rsp, rstkm
++            mov rspp, rstkm
+         %else
+-            add rsp, stack_size_padded
++            add rspp, stack_size_padded
+         %endif
+     %endif
+     POP_IF_USED 14, 13, 12, 11, 10, 9
+@@ -663,17 +894,6 @@ DECLARE_REG 3, ebx, 16
+ DECLARE_REG 4, esi, 20
+ DECLARE_REG 5, edi, 24
+ DECLARE_REG 6, ebp, 28
+-%define rsp esp
+-
+-%macro DECLARE_ARG 1-*
+-    %rep %0
+-        %define r%1m [rstk + stack_offset + 4*%1 + 4]
+-        %define r%1mp dword r%1m
+-        %rotate 1
+-    %endrep
+-%endmacro
+-
+-DECLARE_ARG 7, 8, 9, 10, 11, 12, 13, 14
+ 
+ %macro PROLOGUE 2-5+ ; #args, #regs, #xmm_regs, [stack_size,] arg_names...
+     %assign num_args %1
+@@ -689,8 +909,8 @@ DECLARE_ARG 7, 8, 9, 10, 11, 12, 13, 14
+     ASSERT regs_used <= 7
+     PUSH_IF_USED 3, 4, 5, 6
+     ALLOC_STACK %4
+-    LOAD_IF_USED 0, 1, 2, 3, 4, 5, 6
+     DEFINE_ARGS_INTERNAL %0, %4, %5
++    LOAD_IF_USED 0, 1, 2, 3, 4, 5, 6
+ %endmacro
+ 
+ %define has_epilogue regs_used > 3 || mmsize == 32 || stack_size > 0
+@@ -824,6 +1044,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
+     %2:
+     RESET_MM_PERMUTATION        ; needed for x86-64, also makes disassembly somewhat nicer
+     %xdefine rstk rsp           ; copy of the original stack pointer, used when greater alignment than the known stack alignment is required
++    %xdefine rstkp rspp
+     %assign stack_offset 0      ; stack pointer offset relative to the return address
+     %assign stack_size 0        ; amount of stack space that can be freely used inside a function
+     %assign stack_size_padded 0 ; total amount of allocated stack space, including space for callee-saved xmm registers on WIN64 and alignment padding
+@@ -969,7 +1190,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
+ ; ym# is the corresponding ymm register if mmsize >= 32, otherwise the same as m#
+ ; (All 3 remain in sync through SWAP.)
+ 
+-%macro CAT_XDEFINE 3
++%macro CAT_XDEFINE 3+
+     %xdefine %1%2 %3
+ %endmacro
+ 
+diff --git a/vp8/common/x86/subpixel_mmx.asm b/vp8/common/x86/subpixel_mmx.asm
+index 67bcd0cbd..5e281f132 100644
+--- a/vp8/common/x86/subpixel_mmx.asm
++++ b/vp8/common/x86/subpixel_mmx.asm
+@@ -37,7 +37,7 @@ sym(vp8_filter_block1d_h6_mmx):
+     push        rdi
+     ; end prolog
+ 
+-        mov         rdx,    arg(6) ;vp8_filter
++        mov         rdxp,   arg(6) ;vp8_filter
+ 
+         movq        mm1,    [rdx + 16]             ; do both the negative taps first!!!
+         movq        mm2,    [rdx + 32]         ;
+@@ -136,7 +136,7 @@ sym(vp8_filter_block1dc_v6_mmx):
+ 
+         movq      mm5, [GLOBAL(rd)]
+         push        rbx
+-        mov         rbx, arg(7) ;vp8_filter
++        mov         rbxp, arg(7) ;vp8_filter
+         movq      mm1, [rbx + 16]             ; do both the negative taps first!!!
+         movq      mm2, [rbx + 32]         ;
+         movq      mm6, [rbx + 48]        ;
+diff --git a/vp8/common/x86/subpixel_sse2.asm b/vp8/common/x86/subpixel_sse2.asm
+index 51c015e3d..394e2733b 100644
+--- a/vp8/common/x86/subpixel_sse2.asm
++++ b/vp8/common/x86/subpixel_sse2.asm
+@@ -44,7 +44,7 @@ sym(vp8_filter_block1d8_h6_sse2):
+     push        rdi
+     ; end prolog
+ 
+-        mov         rdx,        arg(6) ;vp8_filter
++        mov         rdxp,       arg(6) ;vp8_filter
+         mov         rsi,        arg(0) ;src_ptr
+ 
+         mov         rdi,        arg(1) ;output_ptr
+@@ -164,7 +164,7 @@ sym(vp8_filter_block1d16_h6_sse2):
+     push        rdi
+     ; end prolog
+ 
+-        mov         rdx,        arg(6) ;vp8_filter
++        mov         rdxp,       arg(6) ;vp8_filter
+         mov         rsi,        arg(0) ;src_ptr
+ 
+         mov         rdi,        arg(1) ;output_ptr
+@@ -344,7 +344,7 @@ sym(vp8_filter_block1d8_v6_sse2):
+     push        rdi
+     ; end prolog
+ 
+-        mov         rax,        arg(7) ;vp8_filter
++        mov         raxp,       arg(7) ;vp8_filter
+         movsxd      rdx,        dword ptr arg(3) ;pixels_per_line
+ 
+         mov         rdi,        arg(1) ;output_ptr
+@@ -439,7 +439,7 @@ sym(vp8_filter_block1d16_v6_sse2):
+     push        rdi
+     ; end prolog
+ 
+-        mov         rax,        arg(7) ;vp8_filter
++        mov         raxp,       arg(7) ;vp8_filter
+         movsxd      rdx,        dword ptr arg(3) ;pixels_per_line
+ 
+         mov         rdi,        arg(1) ;output_ptr
+diff --git a/vp8/encoder/x86/temporal_filter_apply_sse2.asm b/vp8/encoder/x86/temporal_filter_apply_sse2.asm
+index d2b4711b8..ab5d23159 100644
+--- a/vp8/encoder/x86/temporal_filter_apply_sse2.asm
++++ b/vp8/encoder/x86/temporal_filter_apply_sse2.asm
+@@ -59,8 +59,8 @@ sym(vp8_temporal_filter_apply_sse2):
+ 
+         mov         rsi,            arg(0) ; src/frame1
+         mov         rdx,            arg(2) ; predictor frame
+-        mov         rdi,            arg(6) ; accumulator
+-        mov         rax,            arg(7) ; count
++        mov         rdip,           arg(6) ; accumulator
++        mov         raxp,           arg(7) ; count
+ 
+         ; dup the filter weight and store for later
+         movd        xmm0,           arg(5) ; filter_weight
+diff --git a/vp9/encoder/x86/vp9_dct_sse2.asm b/vp9/encoder/x86/vp9_dct_sse2.asm
+index 8152dce86..9c299eaa3 100644
+--- a/vp9/encoder/x86/vp9_dct_sse2.asm
++++ b/vp9/encoder/x86/vp9_dct_sse2.asm
+@@ -45,7 +45,7 @@ SECTION .text
+ %endmacro
+ 
+ INIT_XMM sse2
+-cglobal fwht4x4, 3, 4, 8, input, output, stride
++cglobal fwht4x4, 3, 4, 8, "p", input, "p", output, "d-", stride
+   lea             r3q,       [inputq + strideq*4]
+   movq            m0,        [inputq] ;a1
+   movq            m1,        [inputq + strideq*2] ;b1
+diff --git a/vp9/encoder/x86/vp9_error_sse2.asm b/vp9/encoder/x86/vp9_error_sse2.asm
+index 11d473b2d..2db57e28a 100644
+--- a/vp9/encoder/x86/vp9_error_sse2.asm
++++ b/vp9/encoder/x86/vp9_error_sse2.asm
+@@ -19,7 +19,7 @@ SECTION .text
+ ;                         int64_t *ssz)
+ 
+ INIT_XMM sse2
+-cglobal block_error, 3, 3, 8, uqc, dqc, size, ssz
++cglobal block_error, 3, 3, 8, "p", uqc, "p", dqc, "p-", size, "p", ssz
+   pxor      m4, m4                 ; sse accumulator
+   pxor      m6, m6                 ; ssz accumulator
+   pxor      m5, m5                 ; dedicated zero register
+@@ -76,7 +76,7 @@ cglobal block_error, 3, 3, 8, uqc, dqc, size, ssz
+ ;                            intptr_t block_size)
+ 
+ INIT_XMM sse2
+-cglobal block_error_fp, 3, 3, 6, uqc, dqc, size
++cglobal block_error_fp, 3, 3, 6, "p", uqc, "p", dqc, "d-", size
+   pxor      m4, m4                 ; sse accumulator
+   pxor      m5, m5                 ; dedicated zero register
+ .loop:
+diff --git a/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm b/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm
+index 5703aa3bb..df55064c1 100644
+--- a/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm
++++ b/vp9/encoder/x86/vp9_quantize_ssse3_x86_64.asm
+@@ -19,16 +19,14 @@ pw_1: times 8 dw 1
+ SECTION .text
+ 
+ %macro QUANTIZE_FP 2
+-cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, round, quant, \
+-                                qcoeff, dqcoeff, dequant, \
+-                                eob, scan, iscan
++cglobal quantize_%1, 0, %2, 15, "p", coeff, "p-", ncoeff, "d", skip, \
++                                "p", round, "p", quant, \
++                                "p", qcoeff, "p", dqcoeff, "p", dequant, \
++                                "p", eob, "p", scan, "p", iscan
+ 
+   ; actual quantize loop - setup pointers, rounders, etc.
+-  movifnidn                   coeffq, coeffmp
+-  movifnidn                  ncoeffq, ncoeffmp
+-  mov                             r2, dequantmp
+-  movifnidn                   roundq, roundmp
+-  movifnidn                   quantq, quantmp
++  ASSIGN_ARG dequant, 2
++  LOAD_ARG coeff, ncoeff, dequant, round, quant
+   mova                            m1, [roundq]             ; m1 = round
+   mova                            m2, [quantq]             ; m2 = quant
+ %ifidn %1, fp_32x32
+@@ -38,9 +36,10 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, round, quant, \
+   psrlw                           m1, 1                    ; m1 = (m1 + 1) / 2
+ %endif
+   mova                            m3, [r2q]                ; m3 = dequant
+-  mov                             r3, qcoeffmp
+-  mov                             r4, dqcoeffmp
+-  mov                             r5, iscanmp
++  ASSIGN_ARG qcoeff, 3
++  ASSIGN_ARG dqcoeff, 4
++  ASSIGN_ARG iscan, 5
++  LOAD_ARG qcoeff, dqcoeff, iscan
+ %ifidn %1, fp_32x32
+   psllw                           m2, 1
+ %endif
+@@ -161,7 +160,8 @@ cglobal quantize_%1, 0, %2, 15, coeff, ncoeff, skip, round, quant, \
+ 
+ .accumulate_eob:
+   ; horizontally accumulate/max eobs and write into [eob] memory pointer
+-  mov                             r2, eobmp
++  ASSIGN_ARG eob, 2
++  LOAD_ARG eob
+   pshufd                          m7, m8, 0xe
+   pmaxsw                          m8, m7
+   pshuflw                         m7, m8, 0xe
+diff --git a/vpx_dsp/x86/avg_ssse3_x86_64.asm b/vpx_dsp/x86/avg_ssse3_x86_64.asm
+index 22e0a086c..c980cc95f 100644
+--- a/vpx_dsp/x86/avg_ssse3_x86_64.asm
++++ b/vpx_dsp/x86/avg_ssse3_x86_64.asm
+@@ -97,7 +97,7 @@ SECTION .text
+ 
+ 
+ INIT_XMM ssse3
+-cglobal hadamard_8x8, 3, 5, 11, input, stride, output
++cglobal hadamard_8x8, 3, 5, 11, "p", input, "d-", stride, "p", output
+   lea                r3, [2 * strideq]
+   lea                r4, [4 * strideq]
+ 
+diff --git a/vpx_dsp/x86/fwd_txfm_ssse3_x86_64.asm b/vpx_dsp/x86/fwd_txfm_ssse3_x86_64.asm
+index 32824a03a..dabee1c45 100644
+--- a/vpx_dsp/x86/fwd_txfm_ssse3_x86_64.asm
++++ b/vpx_dsp/x86/fwd_txfm_ssse3_x86_64.asm
+@@ -29,7 +29,7 @@ SECTION .text
+ 
+ %if ARCH_X86_64
+ INIT_XMM ssse3
+-cglobal fdct8x8, 3, 5, 13, input, output, stride
++cglobal fdct8x8, 3, 5, 13, "p", input, "p", output, "d-", stride
+ 
+   mova               m8, [GLOBAL(pd_8192)]
+   mova              m12, [GLOBAL(pw_11585x2)]
+diff --git a/vpx_dsp/x86/highbd_intrapred_sse2.asm b/vpx_dsp/x86/highbd_intrapred_sse2.asm
+index caf506ac0..c3e808642 100644
+--- a/vpx_dsp/x86/highbd_intrapred_sse2.asm
++++ b/vpx_dsp/x86/highbd_intrapred_sse2.asm
+@@ -18,7 +18,7 @@ pw_32: times 4 dd 32
+ 
+ SECTION .text
+ INIT_XMM sse2
+-cglobal highbd_dc_predictor_4x4, 4, 5, 4, dst, stride, above, left, goffset
++cglobal highbd_dc_predictor_4x4, 4, 4, 4, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   movq                  m0, [aboveq]
+@@ -41,7 +41,7 @@ cglobal highbd_dc_predictor_4x4, 4, 5, 4, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_dc_predictor_8x8, 4, 5, 4, dst, stride, above, left, goffset
++cglobal highbd_dc_predictor_8x8, 4, 4, 4, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -76,7 +76,7 @@ cglobal highbd_dc_predictor_8x8, 4, 5, 4, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_dc_predictor_16x16, 4, 5, 5, dst, stride, above, left, goffset
++cglobal highbd_dc_predictor_16x16, 4, 4, 5, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -119,7 +119,7 @@ cglobal highbd_dc_predictor_16x16, 4, 5, 5, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_dc_predictor_32x32, 4, 5, 7, dst, stride, above, left, goffset
++cglobal highbd_dc_predictor_32x32, 4, 4, 7, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   mova                  m0, [aboveq]
+@@ -178,7 +178,7 @@ cglobal highbd_dc_predictor_32x32, 4, 5, 7, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_v_predictor_4x4, 3, 3, 1, dst, stride, above
++cglobal highbd_v_predictor_4x4, 3, 3, 1, "p", dst, "p-", stride, "p", above
+   movq                  m0, [aboveq]
+   movq    [dstq          ], m0
+   movq    [dstq+strideq*2], m0
+@@ -188,7 +188,7 @@ cglobal highbd_v_predictor_4x4, 3, 3, 1, dst, stride, above
+   RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_v_predictor_8x8, 3, 3, 1, dst, stride, above
++cglobal highbd_v_predictor_8x8, 3, 3, 1, "p", dst, "p-", stride, "p", above
+   mova                  m0, [aboveq]
+   DEFINE_ARGS dst, stride, stride3
+   lea             stride3q, [strideq*3]
+@@ -204,7 +204,7 @@ cglobal highbd_v_predictor_8x8, 3, 3, 1, dst, stride, above
+   RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_v_predictor_16x16, 3, 4, 2, dst, stride, above
++cglobal highbd_v_predictor_16x16, 3, 4, 2, "p", dst, "p-", stride, "p", above
+   mova                  m0, [aboveq]
+   mova                  m1, [aboveq+16]
+   DEFINE_ARGS dst, stride, stride3, nlines4
+@@ -225,7 +225,7 @@ cglobal highbd_v_predictor_16x16, 3, 4, 2, dst, stride, above
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_v_predictor_32x32, 3, 4, 4, dst, stride, above
++cglobal highbd_v_predictor_32x32, 3, 4, 4, "p", dst, "p-", stride, "p", above
+   mova                  m0, [aboveq]
+   mova                  m1, [aboveq+16]
+   mova                  m2, [aboveq+32]
+@@ -256,7 +256,7 @@ cglobal highbd_v_predictor_32x32, 3, 4, 4, dst, stride, above
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_tm_predictor_4x4, 5, 5, 6, dst, stride, above, left, bd
++cglobal highbd_tm_predictor_4x4, 5, 5, 6, "p", dst, "p-", stride, "p", above, "p", left, "d", bd
+   movd                  m1, [aboveq-2]
+   movq                  m0, [aboveq]
+   pshuflw               m1, m1, 0x0
+@@ -295,7 +295,7 @@ cglobal highbd_tm_predictor_4x4, 5, 5, 6, dst, stride, above, left, bd
+   RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_tm_predictor_8x8, 5, 6, 5, dst, stride, above, left, bd, one
++cglobal highbd_tm_predictor_8x8, 5, 6, 5, "p", dst, "p-", stride, "p", above, "p", left, "d", bd, one
+   movd                  m1, [aboveq-2]
+   mova                  m0, [aboveq]
+   pshuflw               m1, m1, 0x0
+@@ -339,7 +339,7 @@ cglobal highbd_tm_predictor_8x8, 5, 6, 5, dst, stride, above, left, bd, one
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_tm_predictor_16x16, 5, 5, 8, dst, stride, above, left, bd
++cglobal highbd_tm_predictor_16x16, 5, 5, 8, "p", dst, "p-", stride, "p", above, "p", left, "d", bd, one
+   movd                  m2, [aboveq-2]
+   mova                  m0, [aboveq]
+   mova                  m1, [aboveq+16]
+@@ -386,7 +386,7 @@ cglobal highbd_tm_predictor_16x16, 5, 5, 8, dst, stride, above, left, bd
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal highbd_tm_predictor_32x32, 5, 5, 8, dst, stride, above, left, bd
++cglobal highbd_tm_predictor_32x32, 5, 5, 8, "p", dst, "p-", stride, "p", above, "p", left, "d", bd, one
+   movd                  m0, [aboveq-2]
+   mova                  m1, [aboveq]
+   mova                  m2, [aboveq+16]
+diff --git a/vpx_dsp/x86/highbd_sad4d_sse2.asm b/vpx_dsp/x86/highbd_sad4d_sse2.asm
+index 6c2a61e01..369110b33 100644
+--- a/vpx_dsp/x86/highbd_sad4d_sse2.asm
++++ b/vpx_dsp/x86/highbd_sad4d_sse2.asm
+@@ -215,11 +215,13 @@ SECTION .text
+ ; where NxN = 64x64, 32x32, 16x16, 16x8, 8x16 or 8x8
+ %macro HIGH_SADNXN4D 2
+ %if UNIX64
+-cglobal highbd_sad%1x%2x4d, 5, 8, 8, src, src_stride, ref1, ref_stride, \
+-                              res, ref2, ref3, ref4
++cglobal highbd_sad%1x%2x4d, 5, 8, 8, "p", src, "d-", src_stride, \
++                                     "p", ref1, "d-", ref_stride, \
++                                     "p", res, ref2, ref3, ref4
+ %else
+-cglobal highbd_sad%1x%2x4d, 4, 7, 8, src, src_stride, ref1, ref_stride, \
+-                              ref2, ref3, ref4
++cglobal highbd_sad%1x%2x4d, 4, 7, 8, "p", src, "d-", src_stride, \
++                                     "p", ref1, "d-", ref_stride, \
++                                     "p", ref2, ref3, ref4
+ %endif
+ 
+ ; set m1
+@@ -229,12 +231,10 @@ cglobal highbd_sad%1x%2x4d, 4, 7, 8, src, src_stride, ref1, ref_stride, \
+   pshufd                m1, m1, 0x0
+   pop                 srcq
+ 
+-  movsxdifnidn src_strideq, src_strided
+-  movsxdifnidn ref_strideq, ref_strided
+-  mov                ref2q, [ref1q+gprsize*1]
+-  mov                ref3q, [ref1q+gprsize*2]
+-  mov                ref4q, [ref1q+gprsize*3]
+-  mov                ref1q, [ref1q+gprsize*0]
++  mov                ref2p, [ref1q+ptrsize*1]
++  mov                ref3p, [ref1q+ptrsize*2]
++  mov                ref4p, [ref1q+ptrsize*3]
++  mov                ref1p, [ref1q+ptrsize*0]
+ 
+ ; convert byte pointers to short pointers
+   shl                 srcq, 1
+@@ -265,7 +265,7 @@ cglobal highbd_sad%1x%2x4d, 4, 7, 8, src, src_stride, ref1, ref_stride, \
+   paddd                 m4, m0
+   paddd                 m6, m1
+   punpcklqdq            m4, m6
+-  movifnidn             r4, r4mp
++  LOAD_ARG 4
+   movu                [r4], m4
+   RET
+ %endmacro
+diff --git a/vpx_dsp/x86/highbd_sad_sse2.asm b/vpx_dsp/x86/highbd_sad_sse2.asm
+index bc4b28db2..dc5d62e6e 100644
+--- a/vpx_dsp/x86/highbd_sad_sse2.asm
++++ b/vpx_dsp/x86/highbd_sad_sse2.asm
+@@ -15,19 +15,23 @@ SECTION .text
+ %macro HIGH_SAD_FN 4
+ %if %4 == 0
+ %if %3 == 5
+-cglobal highbd_sad%1x%2, 4, %3, 7, src, src_stride, ref, ref_stride, n_rows
++cglobal highbd_sad%1x%2, 4, %3, 7, "p", src, "d-", src_stride, \
++                                   "p", ref, "d-", ref_stride, n_rows
+ %else ; %3 == 7
+-cglobal highbd_sad%1x%2, 4, %3, 7, src, src_stride, ref, ref_stride, \
++cglobal highbd_sad%1x%2, 4, %3, 7, "p", src, "d-", src_stride, \
++                                   "p", ref, "d-", ref_stride, \
+                             src_stride3, ref_stride3, n_rows
+ %endif ; %3 == 5/7
+ %else ; avg
+ %if %3 == 5
+-cglobal highbd_sad%1x%2_avg, 5, 1 + %3, 7, src, src_stride, ref, ref_stride, \
+-                                    second_pred, n_rows
++cglobal highbd_sad%1x%2_avg, 5, 1 + %3, 7, "p", src, "d-", src_stride, \
++                                           "p", ref, "d-", ref_stride, \
++                                           "p", second_pred, n_rows
+ %else ; %3 == 7
+-cglobal highbd_sad%1x%2_avg, 5, ARCH_X86_64 + %3, 7, src, src_stride, \
+-                                              ref, ref_stride, \
+-                                              second_pred, \
++cglobal highbd_sad%1x%2_avg, 5, ARCH_X86_64 + %3, 7, \
++                                           "p", src, "d-", src_stride, \
++                                           "p", ref, "d-", ref_stride, \
++                                           "p", second_pred, \
+                                               src_stride3, ref_stride3
+ %if ARCH_X86_64
+ %define n_rowsd r7d
+@@ -36,8 +40,6 @@ cglobal highbd_sad%1x%2_avg, 5, ARCH_X86_64 + %3, 7, src, src_stride, \
+ %endif ; x86-32/64
+ %endif ; %3 == 5/7
+ %endif ; avg/sad
+-  movsxdifnidn src_strideq, src_strided
+-  movsxdifnidn ref_strideq, ref_strided
+ %if %3 == 7
+   lea         src_stride3q, [src_strideq*3]
+   lea         ref_stride3q, [ref_strideq*3]
+diff --git a/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm b/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
+index cefde0f57..c8f7db68f 100644
+--- a/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
++++ b/vpx_dsp/x86/highbd_subpel_variance_impl_sse2.asm
+@@ -70,7 +70,7 @@ SECTION .text
+   pshufd               m4, m6, 0x1
+   paddd                m7, m3
+   paddd                m6, m4
+-  mov                  r1, ssem         ; r1 = unsigned int *sse
++  mov                 r1p, ssemp        ; r1 = unsigned int *sse
+   movd               [r1], m7           ; store sse
+   movd                eax, m6           ; store sum as return value
+ %endif
+@@ -93,31 +93,39 @@ SECTION .text
+ 
+ %if ARCH_X86_64
+   %if %2 == 1 ; avg
+-    cglobal highbd_sub_pixel_avg_variance%1xh, 9, 10, 13, src, src_stride, \
+-                                      x_offset, y_offset, \
+-                                      ref, ref_stride, \
+-                                      second_pred, second_stride, height, sse
++    cglobal highbd_sub_pixel_avg_variance%1xh, 9, 10, 13, \
++                                      "p", src, "p-", src_stride, \
++                                      "d", x_offset, "d", y_offset, \
++                                      "p", ref, "p-", ref_stride, \
++                                      "p", second_pred, "p-", second_stride, \
++                                      "d", height, "p", sse
+     %define second_str second_strideq
+   %else
+-    cglobal highbd_sub_pixel_variance%1xh, 7, 8, 13, src, src_stride, \
+-                                  x_offset, y_offset, \
+-                                  ref, ref_stride, height, sse
++    cglobal highbd_sub_pixel_variance%1xh, 7, 8, 13, \
++                                  "p", src, "p-", src_stride, \
++                                  "d", x_offset, "d", y_offset, \
++                                  "p", ref, "p-", ref_stride, \
++                                  "d", height, "p", sse
+   %endif
+   %define block_height heightd
+   %define bilin_filter sseq
+ %else
+   %if CONFIG_PIC=1
+     %if %2 == 1 ; avg
+-      cglobal highbd_sub_pixel_avg_variance%1xh, 7, 7, 13, src, src_stride, \
+-                                        x_offset, y_offset, \
+-                                        ref, ref_stride, \
+-                                        second_pred, second_stride, height, sse
++      cglobal highbd_sub_pixel_avg_variance%1xh, 7, 7, 13, \
++                                  "p*", src, "p-*", src_stride, \
++                                  "d", x_offset, "d", y_offset, \
++                                  "p", ref, "p-", ref_stride, \
++                                  "p", second_pred, "p-", second_stride, \
++                                  "d", height, "p", sse
+       %define block_height dword heightm
+       %define second_str second_stridemp
+     %else
+-      cglobal highbd_sub_pixel_variance%1xh, 7, 7, 13, src, src_stride, \
+-                                    x_offset, y_offset, \
+-                                    ref, ref_stride, height, sse
++      cglobal highbd_sub_pixel_variance%1xh, 7, 7, 13, \
++                                  "p*", src, "p-*", src_stride, \
++                                  "d", x_offset, "d", y_offset, \
++                                  "p", ref, "p-", ref_stride, \
++                                  "d", height, "p", sse
+       %define block_height heightd
+     %endif
+ 
+@@ -126,30 +134,32 @@ SECTION .text
+     %define g_pw_8m y_offsetm
+ 
+     ; Store bilin_filter and pw_8 location in stack
+-    %if GET_GOT_DEFINED == 1
+-      GET_GOT eax
+-      add esp, 4                ; restore esp
+-    %endif
++    GET_GOT_NO_SAVE src_stridep
+ 
+-    lea ecx, [GLOBAL(bilin_filter_m)]
+-    mov g_bilin_filterm, ecx
++    lea srcp, [GLOBAL(bilin_filter_m)]
++    mov g_bilin_filterm, srcp
+ 
+-    lea ecx, [GLOBAL(pw_8)]
+-    mov g_pw_8m, ecx
++    lea srcp, [GLOBAL(pw_8)]
++    mov g_pw_8m, srcp
+ 
+-    LOAD_IF_USED 0, 1         ; load eax, ecx back
++    LOAD_ARG src, src_stride
+   %else
+     %if %2 == 1 ; avg
+-      cglobal highbd_sub_pixel_avg_variance%1xh, 7, 7, 13, src, src_stride, \
+-                                        x_offset, y_offset, \
+-                                        ref, ref_stride, \
+-                                        second_pred, second_stride, height, sse
++      cglobal highbd_sub_pixel_avg_variance%1xh, 7 + 2 * ARCH_X86_64, \
++                        7 + 2 * ARCH_X86_64, 13, \
++                                             "p", src, "p-", src_stride, \
++                                             "d", x_offset, "d", y_offset, \
++                                             "p", ref, "p-", ref_stride, \
++                                             "p", second_pred, "p-", second_stride, \
++                                             "d", height, "p", sse
+       %define block_height dword heightm
+       %define second_str second_stridemp
+     %else
+-      cglobal highbd_sub_pixel_variance%1xh, 7, 7, 13, src, src_stride, \
+-                                    x_offset, y_offset, \
+-                                    ref, ref_stride, height, sse
++      cglobal highbd_sub_pixel_variance%1xh, 7, 7, 13, \
++                                             "p", src, "p-", src_stride, \
++                                             "d", x_offset, "d", y_offset, \
++                                             "p", ref, "p-", ref_stride, \
++                                             "d", height, "p", sse
+       %define block_height heightd
+     %endif
+ 
+diff --git a/vpx_dsp/x86/intrapred_sse2.asm b/vpx_dsp/x86/intrapred_sse2.asm
+index 61af6236e..3b0a2bf38 100644
+--- a/vpx_dsp/x86/intrapred_sse2.asm
++++ b/vpx_dsp/x86/intrapred_sse2.asm
+@@ -42,7 +42,7 @@ SECTION .text
+ %endmacro
+ 
+ INIT_XMM sse2
+-cglobal d45_predictor_4x4, 3, 4, 4, dst, stride, above, goffset
++cglobal d45_predictor_4x4, 3, 3, 4, "p", dst, "p-", stride, "p", above, goffset
+   GET_GOT     goffsetq
+ 
+   movq                 m0, [aboveq]
+@@ -68,7 +68,7 @@ cglobal d45_predictor_4x4, 3, 4, 4, dst, stride, above, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal d45_predictor_8x8, 3, 4, 4, dst, stride, above, goffset
++cglobal d45_predictor_8x8, 3, 3, 4, "p", dst, "p-", stride, "p", above, goffset
+   GET_GOT     goffsetq
+ 
+   movu                m1, [aboveq]
+@@ -107,8 +107,8 @@ cglobal d45_predictor_8x8, 3, 4, 4, dst, stride, above, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal d207_predictor_4x4, 4, 4, 5, dst, stride, unused, left, goffset
+-  GET_GOT     goffsetq
++cglobal d207_predictor_4x4, 4, 4, 5, "p", dst, "p-", stride, "p*", goffset, "p", left
++  GET_GOT_NO_SAVE     goffsetq
+ 
+   movd                m0, [leftq]                ; abcd [byte]
+   punpcklbw           m4, m0, m0                 ; aabb ccdd
+@@ -134,7 +134,7 @@ cglobal d207_predictor_4x4, 4, 4, 5, dst, stride, unused, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_predictor_4x4, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_predictor_4x4, 4, 4, 3, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   movd                  m2, [leftq]
+@@ -156,9 +156,8 @@ cglobal dc_predictor_4x4, 4, 5, 3, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_left_predictor_4x4, 2, 5, 2, dst, stride, above, left, goffset
+-  movifnidn          leftq, leftmp
+-  GET_GOT     goffsetq
++cglobal dc_left_predictor_4x4, 4, 4, 2, "p", dst, "p-", stride, "p*", goffset, "p", left
++  GET_GOT_NO_SAVE goffsetq
+ 
+   pxor                  m1, m1
+   movd                  m0, [leftq]
+@@ -177,7 +176,7 @@ cglobal dc_left_predictor_4x4, 2, 5, 2, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_top_predictor_4x4, 3, 5, 2, dst, stride, above, left, goffset
++cglobal dc_top_predictor_4x4, 3, 3, 2, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -197,7 +196,7 @@ cglobal dc_top_predictor_4x4, 3, 5, 2, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_predictor_8x8, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_predictor_8x8, 4, 4, 3, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -226,7 +225,7 @@ cglobal dc_predictor_8x8, 4, 5, 3, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_top_predictor_8x8, 3, 5, 2, dst, stride, above, left, goffset
++cglobal dc_top_predictor_8x8, 3, 3, 2, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -252,13 +251,12 @@ cglobal dc_top_predictor_8x8, 3, 5, 2, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_left_predictor_8x8, 2, 5, 2, dst, stride, above, left, goffset
+-  movifnidn          leftq, leftmp
+-  GET_GOT     goffsetq
++cglobal dc_left_predictor_8x8, 4, 4, 2, "p", dst, "p-", stride, "p*", goffset, "p", left
++  GET_GOT_NO_SAVE goffsetq
+ 
+   pxor                  m1, m1
+   movq                  m0, [leftq]
+-  DEFINE_ARGS dst, stride, stride3
++  DEFINE_ARGS dst, stride, goffset, stride3
+   lea             stride3q, [strideq*3]
+   psadbw                m0, m1
+   paddw                 m0, [GLOBAL(pw2_8)]
+@@ -279,7 +277,7 @@ cglobal dc_left_predictor_8x8, 2, 5, 2, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_128_predictor_4x4, 2, 5, 1, dst, stride, above, left, goffset
++cglobal dc_128_predictor_4x4, 2, 3, 1, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   DEFINE_ARGS dst, stride, stride3
+@@ -293,7 +291,7 @@ cglobal dc_128_predictor_4x4, 2, 5, 1, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_128_predictor_8x8, 2, 5, 1, dst, stride, above, left, goffset
++cglobal dc_128_predictor_8x8, 2, 3, 1, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   DEFINE_ARGS dst, stride, stride3
+@@ -312,7 +310,7 @@ cglobal dc_128_predictor_8x8, 2, 5, 1, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal dc_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_predictor_16x16, 4, 4, 3, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -345,7 +343,7 @@ cglobal dc_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
+ 
+ 
+ INIT_XMM sse2
+-cglobal dc_top_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_top_predictor_16x16, 4, 4, 3, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -374,7 +372,7 @@ cglobal dc_top_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal dc_left_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_left_predictor_16x16, 4, 4, 3, "p", dst, "p-", stride, "p*", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -403,7 +401,7 @@ cglobal dc_left_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal dc_128_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_128_predictor_16x16, 4, 4, 3, "p", dst, "p-", stride, "p*", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   DEFINE_ARGS dst, stride, stride3, lines4
+@@ -423,7 +421,7 @@ cglobal dc_128_predictor_16x16, 4, 5, 3, dst, stride, above, left, goffset
+ 
+ 
+ INIT_XMM sse2
+-cglobal dc_predictor_32x32, 4, 5, 5, dst, stride, above, left, goffset
++cglobal dc_predictor_32x32, 4, 4, 5, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -465,7 +463,7 @@ cglobal dc_predictor_32x32, 4, 5, 5, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal dc_top_predictor_32x32, 4, 5, 5, dst, stride, above, left, goffset
++cglobal dc_top_predictor_32x32, 4, 4, 5, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -501,7 +499,7 @@ cglobal dc_top_predictor_32x32, 4, 5, 5, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal dc_left_predictor_32x32, 4, 5, 5, dst, stride, above, left, goffset
++cglobal dc_left_predictor_32x32, 4, 4, 5, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   pxor                  m1, m1
+@@ -537,7 +535,7 @@ cglobal dc_left_predictor_32x32, 4, 5, 5, dst, stride, above, left, goffset
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal dc_128_predictor_32x32, 4, 5, 3, dst, stride, above, left, goffset
++cglobal dc_128_predictor_32x32, 4, 4, 3, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+ 
+   DEFINE_ARGS dst, stride, stride3, lines4
+@@ -560,7 +558,7 @@ cglobal dc_128_predictor_32x32, 4, 5, 3, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM sse2
+-cglobal v_predictor_4x4, 3, 3, 1, dst, stride, above
++cglobal v_predictor_4x4, 3, 3, 1, "p", dst, "p-", stride, "p", above
+   movd                  m0, [aboveq]
+   movd      [dstq        ], m0
+   movd      [dstq+strideq], m0
+@@ -570,7 +568,7 @@ cglobal v_predictor_4x4, 3, 3, 1, dst, stride, above
+   RET
+ 
+ INIT_XMM sse2
+-cglobal v_predictor_8x8, 3, 3, 1, dst, stride, above
++cglobal v_predictor_8x8, 3, 3, 1, "p", dst, "p-", stride, "p", above
+   movq                  m0, [aboveq]
+   DEFINE_ARGS dst, stride, stride3
+   lea             stride3q, [strideq*3]
+@@ -586,7 +584,7 @@ cglobal v_predictor_8x8, 3, 3, 1, dst, stride, above
+   RET
+ 
+ INIT_XMM sse2
+-cglobal v_predictor_16x16, 3, 4, 1, dst, stride, above
++cglobal v_predictor_16x16, 3, 4, 1, "p", dst, "p-", stride, "p", above
+   mova                  m0, [aboveq]
+   DEFINE_ARGS dst, stride, stride3, nlines4
+   lea             stride3q, [strideq*3]
+@@ -602,7 +600,7 @@ cglobal v_predictor_16x16, 3, 4, 1, dst, stride, above
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal v_predictor_32x32, 3, 4, 2, dst, stride, above
++cglobal v_predictor_32x32, 3, 4, 2, "p", dst, "p-", stride, "p", above
+   mova                  m0, [aboveq]
+   mova                  m1, [aboveq+16]
+   DEFINE_ARGS dst, stride, stride3, nlines4
+@@ -623,8 +621,7 @@ cglobal v_predictor_32x32, 3, 4, 2, dst, stride, above
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal h_predictor_4x4, 2, 4, 4, dst, stride, line, left
+-  movifnidn          leftq, leftmp
++cglobal h_predictor_4x4, 4, 4, 4, "p", dst, "p-", stride, "p*", line, "p", left
+   movd                  m0, [leftq]
+   punpcklbw             m0, m0
+   punpcklbw             m0, m0
+@@ -639,8 +636,7 @@ cglobal h_predictor_4x4, 2, 4, 4, dst, stride, line, left
+   RET
+ 
+ INIT_XMM sse2
+-cglobal h_predictor_8x8, 2, 5, 3, dst, stride, line, left
+-  movifnidn          leftq, leftmp
++cglobal h_predictor_8x8, 4, 5, 3, "p", dst, "p-", stride, "p*", line, "p", left
+   mov                lineq, -2
+   DEFINE_ARGS  dst, stride, line, left, stride3
+   lea             stride3q, [strideq*3]
+@@ -662,10 +658,8 @@ cglobal h_predictor_8x8, 2, 5, 3, dst, stride, line, left
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal h_predictor_16x16, 2, 5, 3, dst, stride, line, left
+-  movifnidn          leftq, leftmp
++cglobal h_predictor_16x16, 4, 5, 3, "p", dst, "p-",  stride, "p*", line, "p", left, stride3
+   mov                lineq, -4
+-  DEFINE_ARGS dst, stride, line, left, stride3
+   lea             stride3q, [strideq*3]
+ .loop:
+   movd                  m0, [leftq]
+@@ -686,10 +680,8 @@ cglobal h_predictor_16x16, 2, 5, 3, dst, stride, line, left
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal h_predictor_32x32, 2, 5, 3, dst, stride, line, left
+-  movifnidn              leftq, leftmp
++cglobal h_predictor_32x32, 4, 5, 3, "p", dst, "p-", stride, "p*", line, "p", left, stride3
+   mov                    lineq, -8
+-  DEFINE_ARGS dst, stride, line, left, stride3
+   lea                 stride3q, [strideq*3]
+ .loop:
+   movd                      m0, [leftq]
+@@ -714,7 +706,7 @@ cglobal h_predictor_32x32, 2, 5, 3, dst, stride, line, left
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal tm_predictor_4x4, 4, 4, 5, dst, stride, above, left
++cglobal tm_predictor_4x4, 4, 4, 5, "p", dst, "p-", stride, "p", above, "p", left
+   pxor                  m1, m1
+   movq                  m0, [aboveq-1]; [63:0] tl t1 t2 t3 t4 x x x
+   punpcklbw             m0, m1
+@@ -743,7 +735,7 @@ cglobal tm_predictor_4x4, 4, 4, 5, dst, stride, above, left
+   RET
+ 
+ INIT_XMM sse2
+-cglobal tm_predictor_8x8, 4, 4, 5, dst, stride, above, left
++cglobal tm_predictor_8x8, 4, 4, 5, "p", dst, "p-", stride, "p", above, "p", left
+   pxor                  m1, m1
+   movd                  m2, [aboveq-1]
+   movq                  m0, [aboveq]
+@@ -773,7 +765,7 @@ cglobal tm_predictor_8x8, 4, 4, 5, dst, stride, above, left
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal tm_predictor_16x16, 4, 5, 8, dst, stride, above, left
++cglobal tm_predictor_16x16, 4, 5, 8, "p", dst, "p-", stride, "p", above, "p", left
+   pxor                  m1, m1
+   mova                  m2, [aboveq-16];
+   mova                  m0, [aboveq]   ; t1 t2 ... t16 [byte]
+@@ -811,7 +803,7 @@ cglobal tm_predictor_16x16, 4, 5, 8, dst, stride, above, left
+   REP_RET
+ 
+ INIT_XMM sse2
+-cglobal tm_predictor_32x32, 4, 4, 8, dst, stride, above, left
++cglobal tm_predictor_32x32, 4, 4, 8, "p", dst, "p-", stride, "p", above, "p", left
+   pxor                  m1, m1
+   movd                  m2, [aboveq-1]
+   mova                  m0, [aboveq]
+diff --git a/vpx_dsp/x86/intrapred_ssse3.asm b/vpx_dsp/x86/intrapred_ssse3.asm
+index 5e0139fa8..28fd835e8 100644
+--- a/vpx_dsp/x86/intrapred_ssse3.asm
++++ b/vpx_dsp/x86/intrapred_ssse3.asm
+@@ -31,7 +31,7 @@ sh_bfedcba9876543210: db 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
+ SECTION .text
+ 
+ INIT_XMM ssse3
+-cglobal d45_predictor_16x16, 3, 6, 4, dst, stride, above, dst8, line, goffset
++cglobal d45_predictor_16x16, 3, 5, 4, "p", dst, "p-", stride, "p", above, dst8, line, goffset
+   GET_GOT     goffsetq
+ 
+   mova                   m0, [aboveq]
+@@ -82,7 +82,7 @@ cglobal d45_predictor_16x16, 3, 6, 4, dst, stride, above, dst8, line, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d45_predictor_32x32, 3, 6, 7, dst, stride, above, dst16, line, goffset
++cglobal d45_predictor_32x32, 3, 5, 7, "p", dst, "p-", stride, "p", above, dst16, line, goffset
+   GET_GOT     goffsetq
+ 
+   mova                   m0, [aboveq]
+@@ -177,7 +177,7 @@ cglobal d45_predictor_32x32, 3, 6, 7, dst, stride, above, dst16, line, goffset
+ %endmacro
+ 
+ INIT_XMM ssse3
+-cglobal d63_predictor_4x4, 3, 4, 5, dst, stride, above, goffset
++cglobal d63_predictor_4x4, 3, 3, 5, "p", dst, "p-", stride, "p", above, goffset
+   GET_GOT     goffsetq
+ 
+   movq                m3, [aboveq]
+@@ -199,7 +199,7 @@ cglobal d63_predictor_4x4, 3, 4, 5, dst, stride, above, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d63_predictor_8x8, 3, 4, 5, dst, stride, above, goffset
++cglobal d63_predictor_8x8, 3, 3, 5, "p", dst, "p-", stride, "p", above, goffset
+   GET_GOT     goffsetq
+ 
+   movq                m3, [aboveq]
+@@ -235,7 +235,7 @@ cglobal d63_predictor_8x8, 3, 4, 5, dst, stride, above, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d63_predictor_16x16, 3, 5, 5, dst, stride, above, line, goffset
++cglobal d63_predictor_16x16, 3, 4, 5, "p", dst, "p-", stride, "p", above, line, goffset
+   GET_GOT     goffsetq
+ 
+   mova                m0, [aboveq]
+@@ -265,7 +265,7 @@ cglobal d63_predictor_16x16, 3, 5, 5, dst, stride, above, line, goffset
+   REP_RET
+ 
+ INIT_XMM ssse3
+-cglobal d63_predictor_32x32, 3, 5, 8, dst, stride, above, line, goffset
++cglobal d63_predictor_32x32, 3, 4, 8, "p", dst, "p-", stride, "p", above, line, goffset
+   GET_GOT     goffsetq
+ 
+   mova                   m0, [aboveq]
+@@ -310,7 +310,7 @@ cglobal d63_predictor_32x32, 3, 5, 8, dst, stride, above, line, goffset
+   REP_RET
+ 
+ INIT_XMM ssse3
+-cglobal d153_predictor_4x4, 4, 5, 4, dst, stride, above, left, goffset
++cglobal d153_predictor_4x4, 4, 4, 4, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+   movd                m0, [leftq]               ; l1, l2, l3, l4
+   movd                m1, [aboveq-1]            ; tl, t1, t2, t3
+@@ -342,7 +342,7 @@ cglobal d153_predictor_4x4, 4, 5, 4, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d153_predictor_8x8, 4, 5, 8, dst, stride, above, left, goffset
++cglobal d153_predictor_8x8, 4, 4, 8, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+   movq                m0, [leftq]                     ; [0- 7] l1-8 [byte]
+   movhps              m0, [aboveq-1]                  ; [8-15] tl, t1-7 [byte]
+@@ -391,7 +391,7 @@ cglobal d153_predictor_8x8, 4, 5, 8, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d153_predictor_16x16, 4, 5, 8, dst, stride, above, left, goffset
++cglobal d153_predictor_16x16, 4, 4, 8, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+   mova                m0, [leftq]
+   movu                m7, [aboveq-1]
+@@ -470,7 +470,7 @@ cglobal d153_predictor_16x16, 4, 5, 8, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d153_predictor_32x32, 4, 5, 8, dst, stride, above, left, goffset
++cglobal d153_predictor_32x32, 4, 4, 8, "p", dst, "p-", stride, "p", above, "p", left, goffset
+   GET_GOT     goffsetq
+   mova                  m0, [leftq]
+   movu                  m7, [aboveq-1]
+@@ -647,7 +647,7 @@ cglobal d153_predictor_32x32, 4, 5, 8, dst, stride, above, left, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d207_predictor_8x8, 4, 5, 4, dst, stride, stride3, left, goffset
++cglobal d207_predictor_8x8, 4, 4, 4, "p", dst, "p-", stride, "p*", stride3, "p", left, goffset
+   GET_GOT     goffsetq
+   movq                m3, [leftq]            ; abcdefgh [byte]
+   lea           stride3q, [strideq*3]
+@@ -681,7 +681,7 @@ cglobal d207_predictor_8x8, 4, 5, 4, dst, stride, stride3, left, goffset
+   RET
+ 
+ INIT_XMM ssse3
+-cglobal d207_predictor_16x16, 4, 5, 5, dst, stride, stride3, left, goffset
++cglobal d207_predictor_16x16, 4, 4, 5, "p", dst, "p-", stride, "p*", stride3, "p", left, goffset
+   GET_GOT     goffsetq
+   lea           stride3q, [strideq*3]
+   mova                m0, [leftq]            ; abcdefghijklmnop [byte]
+@@ -728,7 +728,7 @@ cglobal d207_predictor_16x16, 4, 5, 5, dst, stride, stride3, left, goffset
+   REP_RET
+ 
+ INIT_XMM ssse3
+-cglobal d207_predictor_32x32, 4, 5, 8, dst, stride, stride3, left, goffset
++cglobal d207_predictor_32x32, 4, 4, 8, "p", dst, "p-", stride, "p*", stride3, "p", left, goffset
+   GET_GOT     goffsetq
+   lea           stride3q, [strideq*3]
+   mova                m1, [leftq]              ;  0-15 [byte]
+diff --git a/vpx_dsp/x86/inv_wht_sse2.asm b/vpx_dsp/x86/inv_wht_sse2.asm
+index bcf1a6ef9..7defe3f7c 100644
+--- a/vpx_dsp/x86/inv_wht_sse2.asm
++++ b/vpx_dsp/x86/inv_wht_sse2.asm
+@@ -82,7 +82,7 @@ SECTION .text
+ %endmacro
+ 
+ INIT_XMM sse2
+-cglobal iwht4x4_16_add, 3, 3, 7, input, output, stride
++cglobal iwht4x4_16_add, 3, 3, 7, "p", input, "p", output, "d-", stride
+   LOAD_TRAN_LOW    0, inputq, 0
+   LOAD_TRAN_LOW    1, inputq, 8
+   psraw           m0,        2
+diff --git a/vpx_dsp/x86/sad4d_sse2.asm b/vpx_dsp/x86/sad4d_sse2.asm
+index 3f6e55ce9..16a2341af 100644
+--- a/vpx_dsp/x86/sad4d_sse2.asm
++++ b/vpx_dsp/x86/sad4d_sse2.asm
+@@ -181,18 +181,18 @@ SECTION .text
+ ; where NxN = 64x64, 32x32, 16x16, 16x8, 8x16, 8x8, 8x4, 4x8 and 4x4
+ %macro SADNXN4D 2
+ %if UNIX64
+-cglobal sad%1x%2x4d, 5, 8, 8, src, src_stride, ref1, ref_stride, \
+-                              res, ref2, ref3, ref4
++cglobal sad%1x%2x4d, 5, 8, 8, "p", src, "d-", src_stride, \
++                              "p", ref1, "d-", ref_stride, \
++                              "p", res, ref2, ref3, ref4
+ %else
+-cglobal sad%1x%2x4d, 4, 7, 8, src, src_stride, ref1, ref_stride, \
+-                              ref2, ref3, ref4
++cglobal sad%1x%2x4d, 4, 7, 8, "p", src, "d-", src_stride, \
++                              "p", ref1, "d-", ref_stride, \
++                              "p", ref2, ref3, ref4
+ %endif
+-  movsxdifnidn src_strideq, src_strided
+-  movsxdifnidn ref_strideq, ref_strided
+-  mov                ref2q, [ref1q+gprsize*1]
+-  mov                ref3q, [ref1q+gprsize*2]
+-  mov                ref4q, [ref1q+gprsize*3]
+-  mov                ref1q, [ref1q+gprsize*0]
++  mov                ref2p, [ref1q+ptrsize*1]
++  mov                ref3p, [ref1q+ptrsize*2]
++  mov                ref4p, [ref1q+ptrsize*3]
++  mov                ref1p, [ref1q+ptrsize*0]
+ 
+   PROCESS_%1x2x4 1, 0, 0, src_strideq, ref_strideq, 1
+ %rep (%2-4)/2
+@@ -209,12 +209,12 @@ cglobal sad%1x%2x4d, 4, 7, 8, src, src_stride, ref1, ref_stride, \
+   mova                  m7, m6
+   punpcklqdq            m4, m6
+   punpckhqdq            m5, m7
+-  movifnidn             r4, r4mp
++  LOAD_ARG 4
+   paddd                 m4, m5
+   movu                [r4], m4
+   RET
+ %else
+-  movifnidn             r4, r4mp
++  LOAD_ARG 4
+   pshufd            m6, m6, 0x08
+   pshufd            m7, m7, 0x08
+   movq              [r4+0], m6
+diff --git a/vpx_dsp/x86/sad_sse2.asm b/vpx_dsp/x86/sad_sse2.asm
+index 1ec906c23..de03423bd 100644
+--- a/vpx_dsp/x86/sad_sse2.asm
++++ b/vpx_dsp/x86/sad_sse2.asm
+@@ -15,19 +15,22 @@ SECTION .text
+ %macro SAD_FN 4
+ %if %4 == 0
+ %if %3 == 5
+-cglobal sad%1x%2, 4, %3, 5, src, src_stride, ref, ref_stride, n_rows
++cglobal sad%1x%2, 4, %3, 5, "p", src, "d-", src_stride, \
++                            "p", ref, "d-", ref_stride, n_rows
+ %else ; %3 == 7
+-cglobal sad%1x%2, 4, %3, 6, src, src_stride, ref, ref_stride, \
++cglobal sad%1x%2, 4, %3, 6, "p", src, "d-", src_stride, \
++                            "p", ref, "d-", ref_stride, \
+                             src_stride3, ref_stride3, n_rows
+ %endif ; %3 == 5/7
+ %else ; avg
+ %if %3 == 5
+-cglobal sad%1x%2_avg, 5, 1 + %3, 5, src, src_stride, ref, ref_stride, \
+-                                    second_pred, n_rows
++cglobal sad%1x%2_avg, 5, 1 + %3, 5, "p", src, "d-", src_stride, \
++                                    "p", ref, "d-", ref_stride, \
++                                    "p", second_pred, n_rows
+ %else ; %3 == 7
+-cglobal sad%1x%2_avg, 5, ARCH_X86_64 + %3, 6, src, src_stride, \
+-                                              ref, ref_stride, \
+-                                              second_pred, \
++cglobal sad%1x%2_avg, 5, ARCH_X86_64 + %3, 6, "p", src, "d-", src_stride, \
++                                              "p", ref, "d-", ref_stride, \
++                                              "p", second_pred, \
+                                               src_stride3, ref_stride3
+ %if ARCH_X86_64
+ %define n_rowsd r7d
+@@ -36,8 +39,6 @@ cglobal sad%1x%2_avg, 5, ARCH_X86_64 + %3, 6, src, src_stride, \
+ %endif ; x86-32/64
+ %endif ; %3 == 5/7
+ %endif ; avg/sad
+-  movsxdifnidn src_strideq, src_strided
+-  movsxdifnidn ref_strideq, ref_strided
+ %if %3 == 7
+   lea         src_stride3q, [src_strideq*3]
+   lea         ref_stride3q, [ref_strideq*3]
+diff --git a/vpx_dsp/x86/ssim_opt_x86_64.asm b/vpx_dsp/x86/ssim_opt_x86_64.asm
+index 300fa8aab..7aa187e9b 100644
+--- a/vpx_dsp/x86/ssim_opt_x86_64.asm
++++ b/vpx_dsp/x86/ssim_opt_x86_64.asm
+@@ -122,11 +122,11 @@ sym(vpx_ssim_parms_16x16_sse2):
+     movd            [rdi], xmm15;
+     mov             rdi,arg(5)
+     movd            [rdi], xmm14;
+-    mov             rdi,arg(6)
++    mov             rdip,arg(6)
+     movd            [rdi], xmm13;
+-    mov             rdi,arg(7)
++    mov             rdip,arg(7)
+     movd            [rdi], xmm12;
+-    mov             rdi,arg(8)
++    mov             rdip,arg(8)
+     movd            [rdi], xmm11;
+ 
+     ; begin epilog
+@@ -203,11 +203,11 @@ sym(vpx_ssim_parms_8x8_sse2):
+     movd            [rdi], xmm15;
+     mov             rdi,arg(5)
+     movd            [rdi], xmm14;
+-    mov             rdi,arg(6)
++    mov             rdip,arg(6)
+     movd            [rdi], xmm13;
+-    mov             rdi,arg(7)
++    mov             rdip,arg(7)
+     movd            [rdi], xmm12;
+-    mov             rdi,arg(8)
++    mov             rdip,arg(8)
+     movd            [rdi], xmm11;
+ 
+     ; begin epilog
+diff --git a/vpx_dsp/x86/subpel_variance_sse2.asm b/vpx_dsp/x86/subpel_variance_sse2.asm
+index 5adb9b8c3..6b5c75adc 100644
+--- a/vpx_dsp/x86/subpel_variance_sse2.asm
++++ b/vpx_dsp/x86/subpel_variance_sse2.asm
+@@ -73,7 +73,7 @@ SECTION .text
+   movhlps              m4, m6
+   paddd                m7, m3
+   paddd                m6, m4
+-  mov                  r1, ssem         ; r1 = unsigned int *sse
++  mov                 r1p, ssemp        ; r1 = unsigned int *sse
+   pshufd               m4, m6, 0x1
+   movd               [r1], m7           ; store sse
+   paddd                m6, m4
+@@ -84,7 +84,7 @@ SECTION .text
+   paddw                m6, m4
+   paddd                m7, m3
+   pcmpgtw              m5, m6           ; mask for 0 > x
+-  mov                  r1, ssem         ; r1 = unsigned int *sse
++  mov                 r1p, ssemp        ; r1 = unsigned int *sse
+   punpcklwd            m6, m5           ; sign-extend m6 word->dword
+   movd               [r1], m7           ; store sse
+   pshuflw              m4, m6, 0xe
+@@ -116,29 +116,39 @@ SECTION .text
+ 
+ %if ARCH_X86_64
+   %if %2 == 1 ; avg
+-    cglobal sub_pixel_avg_variance%1xh, 9, 10, 13, src, src_stride, \
+-                                        x_offset, y_offset, ref, ref_stride, \
+-                                        second_pred, second_stride, height, sse
++    cglobal sub_pixel_avg_variance%1xh, 9, 10, 13, \
++                                      "p", src, "p-", src_stride, \
++                                      "d", x_offset, "d", y_offset, \
++                                      "p", ref, "p-", ref_stride, \
++                                      "p", second_pred, "p-", second_stride, \
++                                      "d", height, "p", sse
+     %define second_str second_strideq
+   %else
+-    cglobal sub_pixel_variance%1xh, 7, 8, 13, src, src_stride, \
+-                                    x_offset, y_offset, ref, ref_stride, \
+-                                    height, sse
++    cglobal sub_pixel_variance%1xh, 7, 8, 13, \
++                                  "p", src, "p-", src_stride, \
++                                  "d", x_offset, "d", y_offset, \
++                                  "p", ref, "p-", ref_stride, \
++                                  "d", height, "p", sse
+   %endif
+   %define block_height heightd
+   %define bilin_filter sseq
+ %else
+   %if CONFIG_PIC=1
+     %if %2 == 1 ; avg
+-      cglobal sub_pixel_avg_variance%1xh, 7, 7, 13, src, src_stride, \
+-                                          x_offset, y_offset, ref, ref_stride, \
+-                                          second_pred, second_stride, height, sse
++      cglobal sub_pixel_avg_variance%1xh, 7, 7, 13, \
++                                      "p*", src, "p-*", src_stride, \
++                                      "d", x_offset, "d", y_offset, \
++                                      "p", ref, "p-", ref_stride, \
++                                      "p", second_pred, "p-", second_stride, \
++                                      "d", height, "p", sse
+       %define block_height dword heightm
+       %define second_str second_stridemp
+     %else
+-      cglobal sub_pixel_variance%1xh, 7, 7, 13, src, src_stride, \
+-                                      x_offset, y_offset, ref, ref_stride, \
+-                                      height, sse
++      cglobal sub_pixel_variance%1xh, 7, 7, 13, \
++                                  "p*", src, "p-*", src_stride, \
++                                  "d", x_offset, "d", y_offset, \
++                                  "p", ref, "p-", ref_stride, \
++                                  "d", height, "p", sse
+       %define block_height heightd
+     %endif
+ 
+@@ -147,30 +157,32 @@ SECTION .text
+     %define g_pw_8m y_offsetm
+ 
+     ;Store bilin_filter and pw_8 location in stack
+-    %if GET_GOT_DEFINED == 1
+-      GET_GOT eax
+-      add esp, 4                ; restore esp
+-    %endif
++    GET_GOT_NO_SAVE src_stridep
+ 
+-    lea ecx, [GLOBAL(bilin_filter_m)]
+-    mov g_bilin_filterm, ecx
++    lea srcp, [GLOBAL(bilin_filter_m)]
++    mov g_bilin_filterm, srcp
+ 
+-    lea ecx, [GLOBAL(pw_8)]
+-    mov g_pw_8m, ecx
++    lea srcp, [GLOBAL(pw_8)]
++    mov g_pw_8m, srcp
+ 
+-    LOAD_IF_USED 0, 1         ; load eax, ecx back
++    LOAD_ARG src, src_stride
+   %else
+     %if %2 == 1 ; avg
+-      cglobal sub_pixel_avg_variance%1xh, 7, 7, 13, src, src_stride, \
+-                                          x_offset, y_offset, \
+-                                          ref, ref_stride, second_pred, second_stride, \
+-                                          height, sse
++      cglobal sub_pixel_avg_variance%1xh, 7 + 2 * ARCH_X86_64, \
++                        7 + 2 * ARCH_X86_64, 13, \
++                                      "p", src, "p-", src_stride, \
++                                      "d", x_offset, "d", y_offset, \
++                                      "p", ref, "p-", ref_stride, \
++                                      "p", second_pred, "p-", second_stride, \
++                                      "d", height, "p", sse
+       %define block_height dword heightm
+       %define second_str second_stridemp
+     %else
+-      cglobal sub_pixel_variance%1xh, 7, 7, 13, src, src_stride, \
+-                                      x_offset, y_offset, ref, ref_stride, \
+-                                      height, sse
++      cglobal sub_pixel_variance%1xh, 7, 7, 13, \
++                                  "p", src, "p-", src_stride, \
++                                  "d", x_offset, "d", y_offset, \
++                                  "p", ref, "p-", ref_stride, \
++                                  "d", height, "p", sse
+       %define block_height heightd
+     %endif
+     %define bilin_filter bilin_filter_m
+diff --git a/vpx_dsp/x86/subtract_sse2.asm b/vpx_dsp/x86/subtract_sse2.asm
+index 4273efb85..99c7570bc 100644
+--- a/vpx_dsp/x86/subtract_sse2.asm
++++ b/vpx_dsp/x86/subtract_sse2.asm
+@@ -19,9 +19,8 @@ SECTION .text
+ 
+ INIT_XMM sse2
+ cglobal subtract_block, 7, 7, 8, \
+-                        rows, cols, diff, diff_stride, src, src_stride, \
+-                        pred, pred_stride
+-%define pred_str colsq
++                        "d", rows, "d", cols, "p", diff, "p-", diff_stride, \
++                        "p", src, "p-",src_stride, "p", pred, "p-", pred_stride
+   pxor                  m7, m7         ; dedicated zero register
+   cmp                colsd, 4
+   je .case_4
+@@ -31,7 +30,7 @@ cglobal subtract_block, 7, 7, 8, \
+   je .case_16
+   cmp                colsd, 32
+   je .case_32
+-
++ASSIGN_ARG pred_stride, cols
+ %macro loop16 6
+   mova                  m0, [srcq+%1]
+   mova                  m4, [srcq+%2]
+@@ -55,34 +54,34 @@ cglobal subtract_block, 7, 7, 8, \
+   mova [diffq+mmsize*1+%6], m1
+ %endmacro
+ 
+-  mov             pred_str, pred_stridemp
++  LOAD_ARG pred_stride
+ .loop_64:
+   loop16 0*mmsize, 1*mmsize, 0*mmsize, 1*mmsize, 0*mmsize, 2*mmsize
+   loop16 2*mmsize, 3*mmsize, 2*mmsize, 3*mmsize, 4*mmsize, 6*mmsize
+   lea                diffq, [diffq+diff_strideq*2]
+-  add                predq, pred_str
++  add                predq, pred_strideq
+   add                 srcq, src_strideq
+   dec                rowsd
+   jg .loop_64
+   RET
+ 
+ .case_32:
+-  mov             pred_str, pred_stridemp
++  LOAD_ARG pred_stride
+ .loop_32:
+   loop16 0, mmsize, 0, mmsize, 0, 2*mmsize
+   lea                diffq, [diffq+diff_strideq*2]
+-  add                predq, pred_str
++  add                predq, pred_strideq
+   add                 srcq, src_strideq
+   dec                rowsd
+   jg .loop_32
+   RET
+ 
+ .case_16:
+-  mov             pred_str, pred_stridemp
++  LOAD_ARG pred_stride
+ .loop_16:
+-  loop16 0, src_strideq, 0, pred_str, 0, diff_strideq*2
++  loop16 0, src_strideq, 0, pred_strideq, 0, diff_strideq*2
+   lea                diffq, [diffq+diff_strideq*4]
+-  lea                predq, [predq+pred_str*2]
++  lea                predq, [predq+pred_strideq*2]
+   lea                 srcq, [srcq+src_strideq*2]
+   sub                rowsd, 2
+   jg .loop_16
+@@ -92,7 +91,7 @@ cglobal subtract_block, 7, 7, 8, \
+   movh                  m0, [srcq]
+   movh                  m2, [srcq+src_strideq]
+   movh                  m1, [predq]
+-  movh                  m3, [predq+pred_str]
++  movh                  m3, [predq+pred_strideq]
+   punpcklbw             m0, m7
+   punpcklbw             m1, m7
+   punpcklbw             m2, m7
+@@ -104,24 +103,24 @@ cglobal subtract_block, 7, 7, 8, \
+ %endmacro
+ 
+ .case_8:
+-  mov             pred_str, pred_stridemp
++  LOAD_ARG pred_stride
+ .loop_8:
+   loop_h
+   lea                diffq, [diffq+diff_strideq*4]
+   lea                 srcq, [srcq+src_strideq*2]
+-  lea                predq, [predq+pred_str*2]
++  lea                predq, [predq+pred_strideq*2]
+   sub                rowsd, 2
+   jg .loop_8
+   RET
+ 
+ INIT_MMX
+ .case_4:
+-  mov             pred_str, pred_stridemp
++  LOAD_ARG pred_stride
+ .loop_4:
+   loop_h
+   lea                diffq, [diffq+diff_strideq*4]
+   lea                 srcq, [srcq+src_strideq*2]
+-  lea                predq, [predq+pred_str*2]
++  lea                predq, [predq+pred_strideq*2]
+   sub                rowsd, 2
+   jg .loop_4
+   RET
+diff --git a/vpx_dsp/x86/vpx_convolve_copy_sse2.asm b/vpx_dsp/x86/vpx_convolve_copy_sse2.asm
+index 3f444e2e6..2f43d3c9c 100644
+--- a/vpx_dsp/x86/vpx_convolve_copy_sse2.asm
++++ b/vpx_dsp/x86/vpx_convolve_copy_sse2.asm
+@@ -20,14 +20,14 @@ SECTION .text
+ %endif
+ %ifidn %2, highbd
+ %define pavg pavgw
+-cglobal %2_convolve_%1, 4, 8, 4+AUX_XMM_REGS, src, src_stride, \
+-                                              dst, dst_stride, \
+-                                              f, fxo, fxs, fyo, fys, w, h, bd
++cglobal %2_convolve_%1, 4, 8, 4+AUX_XMM_REGS, "p", src, "p-", src_stride, \
++                                 "p", dst, "p-", dst_stride, \
++                                 f, fxo, fxs, fyo, fys, w, h, bd
+ %else
+ %define pavg pavgb
+-cglobal convolve_%1, 4, 8, 4+AUX_XMM_REGS, src, src_stride, \
+-                                           dst, dst_stride, \
+-                                           f, fxo, fxs, fyo, fys, w, h
++cglobal convolve_%1, 4, 7, 4+AUX_XMM_REGS, "p", src, "p-", src_stride, \
++                              "p", dst, "p-", dst_stride, \
++                              f, fxo, fxs, fyo, fys, w, h
+ %endif
+   mov r4d, dword wm
+ %ifidn %2, highbd
+diff --git a/vpx_dsp/x86/vpx_subpixel_8t_ssse3.asm b/vpx_dsp/x86/vpx_subpixel_8t_ssse3.asm
+index 952d9307d..79a75c00e 100644
+--- a/vpx_dsp/x86/vpx_subpixel_8t_ssse3.asm
++++ b/vpx_dsp/x86/vpx_subpixel_8t_ssse3.asm
+@@ -76,7 +76,8 @@ SECTION .text
+ 
+ %macro SUBPIX_HFILTER4 1
+ cglobal filter_block1d4_%1, 6, 6, 11, LOCAL_VARS_SIZE_H4, \
+-                            src, sstride, dst, dstride, height, filter
++                            "p", src, "p-", sstride, "p", dst, "p-", dstride, \
++                            "d", height, "p", filter
+     mova                m4, [filterq]
+     packsswb            m4, m4
+ %if ARCH_X86_64
+@@ -188,7 +189,8 @@ cglobal filter_block1d4_%1, 6, 6, 11, LOCAL_VARS_SIZE_H4, \
+ ;-------------------------------------------------------------------------------
+ %macro SUBPIX_HFILTER8 1
+ cglobal filter_block1d8_%1, 6, 6, 14, LOCAL_VARS_SIZE, \
+-                            src, sstride, dst, dstride, height, filter
++                            "p", src, "p-", sstride, "p", dst, "p-", dstride, \
++                            "d", height, "p", filter
+     mova                 m4, [filterq]
+     SETUP_LOCAL_VARS
+     dec             heightd
+@@ -279,7 +281,8 @@ cglobal filter_block1d8_%1, 6, 6, 14, LOCAL_VARS_SIZE, \
+ ;-------------------------------------------------------------------------------
+ %macro SUBPIX_HFILTER16 1
+ cglobal filter_block1d16_%1, 6, 6, 14, LOCAL_VARS_SIZE, \
+-                             src, sstride, dst, dstride, height, filter
++                             "p", src, "p-", sstride, "p", dst, "p-", dstride, \
++                             "d", height, "p", filter
+     mova          m4, [filterq]
+     SETUP_LOCAL_VARS
+ 
+@@ -347,7 +350,8 @@ SUBPIX_HFILTER4  h8_avg  ; vpx_filter_block1d4_h8_avg_ssse3
+ 
+ %macro SUBPIX_VFILTER 2
+ cglobal filter_block1d%2_%1, 6, NUM_GENERAL_REG_USED, 15, LOCAL_VARS_SIZE, \
+-                             src, sstride, dst, dstride, height, filter
++                             "p", src, "p-", sstride, "p", dst, "p-", dstride, \
++                             "d", height, "p", filter
+     mova          m4, [filterq]
+     SETUP_LOCAL_VARS
+ 
+@@ -577,7 +581,8 @@ cglobal filter_block1d%2_%1, 6, NUM_GENERAL_REG_USED, 15, LOCAL_VARS_SIZE, \
+ ;-------------------------------------------------------------------------------
+ %macro SUBPIX_VFILTER16 1
+ cglobal filter_block1d16_%1, 6, NUM_GENERAL_REG_USED, 16, LOCAL_VARS_SIZE, \
+-                             src, sstride, dst, dstride, height, filter
++                             "p", src, "p-", sstride, "p", dst, "p-", dstride, \
++                             "d", height, "p", filter
+     mova                     m4, [filterq]
+     SETUP_LOCAL_VARS
+ 
+diff --git a/vpx_ports/x86_abi_support.asm b/vpx_ports/x86_abi_support.asm
+index 708fa101c..31eab5e91 100644
+--- a/vpx_ports/x86_abi_support.asm
++++ b/vpx_ports/x86_abi_support.asm
+@@ -28,6 +28,12 @@
+ %define ABI_IS_32BIT 0
+ %endif
+ 
++%ifidn __OUTPUT_FORMAT__,elfx32
++%define ABI_X32 1
++%else
++%define ABI_X32 0
++%endif
++
+ %if ABI_IS_32BIT
+ %define rax eax
+ %define rbx ebx
+@@ -37,6 +43,14 @@
+ %define rdi edi
+ %define rsp esp
+ %define rbp ebp
++%define eaxp eax
++%define ebxp ebx
++%define ecxp ecx
++%define edxp edx
++%define esip esi
++%define edip edi
++%define espp esp
++%define ebpp ebp
+ %define movsxd mov
+ %macro movq 2
+   %ifidn %1,eax
+@@ -77,6 +91,41 @@
+ %endmacro
+ %endif
+ 
++%if ABI_IS_32BIT || ABI_X32
++%define raxp eax
++%define rbxp ebx
++%define rcxp ecx
++%define rdxp edx
++%define rsip esi
++%define rdip edi
++%define rspp esp
++%define rbpp ebp
++%define r8p r8d
++%define r9p r9d
++%define r10p r10d
++%define r11p r11d
++%define r12p r12d
++%define r13p r13d
++%define r14p r14d
++%define r15p r15d
++%else
++%define raxp rax
++%define rbxp rbx
++%define rcxp rcx
++%define rdxp rdx
++%define rsip rsi
++%define rdip rdi
++%define rspp rsp
++%define rbpp rbp
++%define r8p r8
++%define r9p r9
++%define r10p r10
++%define r11p r11
++%define r12p r12
++%define r13p r13
++%define r14p r14
++%define r15p r15
++%endif
+ 
+ ; LIBVPX_YASM_WIN64
+ ; Set LIBVPX_YASM_WIN64 if output is Windows 64bit so the code will work if x64
+@@ -167,9 +216,9 @@
+ ; This macro uses one temporary register, which is not preserved, and thus
+ ; must be specified as an argument.
+ %macro ALIGN_STACK 2
+-    mov         %2, rsp
+-    and         rsp, -%1
+-    lea         rsp, [rsp - (%1 - REG_SZ_BYTES)]
++    mov         %2 %+ p, rspp
++    and         rspp, -%1
++    lea         rspp, [rsp - (%1 - REG_SZ_BYTES)]
+     push        %2
+ %endmacro
+ 
+@@ -312,7 +361,7 @@
+     %endif
+   %endm
+ %endif
+-  %define UNSHADOW_ARGS mov rsp, rbp
++  %define UNSHADOW_ARGS mov rspp, rbpp
+ %endif
+ 
+ ; Win64 ABI requires that XMM6:XMM15 are callee saved
+-- 
+2.21.0
+

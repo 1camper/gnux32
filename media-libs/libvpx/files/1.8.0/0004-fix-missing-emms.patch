@@ -1,0 +1,1324 @@
+From e7a3a2161f44286952003e8ab0247e27d1c4e9a3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sat, 22 Sep 2018 18:15:35 +0200
+Subject: [PATCH 4/5] fix missing emms
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Always clear the fpu state after using mmx instructions as
+required by the ABI for any external funtion.
+Replace clear_system_state with assert(check_system_state()) to
+ensure that no instance of mmx use remains broken.
+
+BUG=webm:1500
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: Ib8610f495c2830796b4d9f6cf9ad2aef5c0a8082
+---
+ test/clear_system_state.h          |  5 +-
+ vp8/common/postproc.c              |  4 +-
+ vp8/common/x86/dequantize_mmx.asm  |  2 +
+ vp8/common/x86/idctllm_mmx.asm     |  2 +
+ vp8/common/x86/recon_mmx.asm       |  2 +
+ vp8/common/x86/subpixel_mmx.asm    |  2 +
+ vp8/common/x86/subpixel_ssse3.asm  |  2 +
+ vp8/decoder/onyxd_if.c             |  4 +-
+ vp8/encoder/bitstream.c            |  4 +-
+ vp8/encoder/encodemv.c             |  2 +-
+ vp8/encoder/firstpass.c            | 12 ++---
+ vp8/encoder/onyx_if.c              | 27 +++++-----
+ vp8/encoder/ratectrl.c             |  9 ++--
+ vp8/encoder/rdopt.c                |  2 +-
+ vp8/vp8_dx_iface.c                 |  2 +-
+ vp9/common/vp9_postproc.c          |  4 +-
+ vp9/decoder/vp9_decoder.c          |  4 +-
+ vp9/encoder/vp9_aq_360.c           |  2 +-
+ vp9/encoder/vp9_aq_complexity.c    |  5 +-
+ vp9/encoder/vp9_aq_cyclicrefresh.c |  2 +-
+ vp9/encoder/vp9_aq_variance.c      |  6 +--
+ vp9/encoder/vp9_bitstream.c        |  2 +-
+ vp9/encoder/vp9_blockiness.c       |  3 +-
+ vp9/encoder/vp9_encodeframe.c      | 10 ++--
+ vp9/encoder/vp9_encoder.c          | 43 ++++++++-------
+ vp9/encoder/vp9_firstpass.c        | 14 ++---
+ vp9/encoder/vp9_mbgraph.c          |  2 +-
+ vp9/encoder/vp9_ratectrl.c         |  7 ++-
+ vp9/encoder/vp9_rd.c               |  2 +-
+ vp9/encoder/vp9_rdopt.c            | 84 ++++++++++++++----------------
+ vp9/vp9_cx_iface.c                 |  4 +-
+ vpx_dsp/fastssim.c                 |  2 +-
+ vpx_dsp/psnrhvs.c                  |  2 +-
+ vpx_dsp/ssim.c                     |  2 +-
+ vpx_dsp/x86/deblock_sse2.asm       |  2 +
+ vpx_dsp/x86/sad_sse3.asm           |  3 ++
+ vpx_dsp/x86/subtract_sse2.asm      |  1 +
+ vpx_ports/emms_mmx.asm             | 20 +++++++
+ vpx_ports/emms_mmx.c               | 15 ------
+ vpx_ports/system_state.h           |  4 +-
+ vpx_ports/vpx_ports.mk             |  6 ---
+ 41 files changed, 170 insertions(+), 162 deletions(-)
+ delete mode 100644 vpx_ports/emms_mmx.c
+
+diff --git a/test/clear_system_state.h b/test/clear_system_state.h
+index ba3c0b386..94fd1c484 100644
+--- a/test/clear_system_state.h
++++ b/test/clear_system_state.h
+@@ -11,13 +11,16 @@
+ #define VPX_TEST_CLEAR_SYSTEM_STATE_H_
+ 
+ #include "./vpx_config.h"
++#include <cassert>
+ #include "vpx_ports/system_state.h"
+ 
+ namespace libvpx_test {
+ 
+ // Reset system to a known state. This function should be used for all non-API
+ // test cases.
+-inline void ClearSystemState() { vpx_clear_system_state(); }
++inline void ClearSystemState() {
++    assert(vpx_check_system_state());
++}
+ 
+ }  // namespace libvpx_test
+ #endif  // VPX_TEST_CLEAR_SYSTEM_STATE_H_
+diff --git a/vp8/common/postproc.c b/vp8/common/postproc.c
+index 2ed19c4fd..5e9e00994 100644
+--- a/vp8/common/postproc.c
++++ b/vp8/common/postproc.c
+@@ -204,7 +204,7 @@ int vp8_post_proc_frame(VP8_COMMON *oci, YV12_BUFFER_CONFIG *dest,
+     }
+   }
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   if ((flags & VP8D_MFQE) && oci->postproc_state.last_frame_valid &&
+       oci->current_video_frame > 10 &&
+@@ -246,7 +246,7 @@ int vp8_post_proc_frame(VP8_COMMON *oci, YV12_BUFFER_CONFIG *dest,
+         oci->postproc_state.last_noise != noise_level) {
+       double sigma;
+       struct postproc_state *ppstate = &oci->postproc_state;
+-      vpx_clear_system_state();
++      assert(vpx_check_system_state());
+       sigma = noise_level + .5 + .6 * q / 63.0;
+       ppstate->clamp =
+           vpx_setup_noise(sigma, ppstate->generated_noise, oci->Width + 256);
+diff --git a/vp8/common/x86/dequantize_mmx.asm b/vp8/common/x86/dequantize_mmx.asm
+index bfdd99778..b2e64f7cd 100644
+--- a/vp8/common/x86/dequantize_mmx.asm
++++ b/vp8/common/x86/dequantize_mmx.asm
+@@ -44,6 +44,7 @@ sym(vp8_dequantize_b_impl_mmx):
+         movq      [rdi+24], mm1
+ 
+     ; begin epilog
++    emms
+     pop rdi
+     pop rsi
+     UNSHADOW_ARGS
+@@ -241,6 +242,7 @@ sym(vp8_dequant_idct_add_mmx):
+         movd        [rdx+rdi*2],    mm5
+ 
+     ; begin epilog
++    emms
+     pop rdi
+     RESTORE_GOT
+     UNSHADOW_ARGS
+diff --git a/vp8/common/x86/idctllm_mmx.asm b/vp8/common/x86/idctllm_mmx.asm
+index 5773d9d84..1dc3d9531 100644
+--- a/vp8/common/x86/idctllm_mmx.asm
++++ b/vp8/common/x86/idctllm_mmx.asm
+@@ -212,6 +212,7 @@ sym(vp8_short_idct4x4llm_mmx):
+     movd        [rdx+rdi*2],    mm5
+ 
+     ; begin epilog
++    emms
+     pop rdi
+     pop rsi
+     RESTORE_GOT
+@@ -279,6 +280,7 @@ sym(vp8_dc_only_idct_add_mmx):
+         movd        [rax+rcx],      mm4
+ 
+     ; begin epilog
++    emms
+     RESTORE_GOT
+     UNSHADOW_ARGS
+     pop         rbp
+diff --git a/vp8/common/x86/recon_mmx.asm b/vp8/common/x86/recon_mmx.asm
+index e6a48f6b0..7b38b7526 100644
+--- a/vp8/common/x86/recon_mmx.asm
++++ b/vp8/common/x86/recon_mmx.asm
+@@ -69,6 +69,7 @@ sym(vp8_copy_mem8x8_mmx):
+         movq        [rdi+rcx*2],mm1
+ 
+     ; begin epilog
++    emms
+     pop rdi
+     pop rsi
+     UNSHADOW_ARGS
+@@ -113,6 +114,7 @@ sym(vp8_copy_mem8x4_mmx):
+         movq        [rdi+rcx],      mm3
+ 
+     ; begin epilog
++    emms
+     pop rdi
+     pop rsi
+     UNSHADOW_ARGS
+diff --git a/vp8/common/x86/subpixel_mmx.asm b/vp8/common/x86/subpixel_mmx.asm
+index 5e281f132..a5d8f41e0 100644
+--- a/vp8/common/x86/subpixel_mmx.asm
++++ b/vp8/common/x86/subpixel_mmx.asm
+@@ -105,6 +105,7 @@ sym(vp8_filter_block1d_h6_mmx):
+         jnz         .nextrow                 ; next row
+ 
+     ; begin epilog
++    emms
+     pop rdi
+     pop rsi
+     RESTORE_GOT
+@@ -195,6 +196,7 @@ sym(vp8_filter_block1dc_v6_mmx):
+         pop         rbx
+ 
+     ; begin epilog
++    emms
+     pop rdi
+     pop rsi
+     RESTORE_GOT
+diff --git a/vp8/common/x86/subpixel_ssse3.asm b/vp8/common/x86/subpixel_ssse3.asm
+index 8d55c9320..8ed38dcbb 100644
+--- a/vp8/common/x86/subpixel_ssse3.asm
++++ b/vp8/common/x86/subpixel_ssse3.asm
+@@ -818,6 +818,7 @@ sym(vp8_filter_block1d4_v6_ssse3):
+     jnz         .vp8_filter_block1d4_v6_ssse3_loop
+ 
+     ; begin epilog
++    emms
+     pop rdi
+     pop rsi
+     RESTORE_GOT
+@@ -866,6 +867,7 @@ sym(vp8_filter_block1d4_v6_ssse3):
+     jnz         .vp8_filter_block1d4_v4_ssse3_loop
+ 
+     ; begin epilog
++    emms
+     pop rdi
+     pop rsi
+     RESTORE_GOT
+diff --git a/vp8/decoder/onyxd_if.c b/vp8/decoder/onyxd_if.c
+index c6fb51d0c..d8f326d37 100644
+--- a/vp8/decoder/onyxd_if.c
++++ b/vp8/decoder/onyxd_if.c
+@@ -344,7 +344,7 @@ int vp8dx_receive_compressed_data(VP8D_COMP *pbi, size_t size,
+     goto decode_exit;
+   }
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   if (cm->show_frame) {
+     cm->current_video_frame++;
+@@ -407,7 +407,7 @@ int vp8dx_get_raw_frame(VP8D_COMP *pbi, YV12_BUFFER_CONFIG *sd,
+   }
+ 
+ #endif /*!CONFIG_POSTPROC*/
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   return ret;
+ }
+ 
+diff --git a/vp8/encoder/bitstream.c b/vp8/encoder/bitstream.c
+index 8dd042775..4c0cc91f3 100644
+--- a/vp8/encoder/bitstream.c
++++ b/vp8/encoder/bitstream.c
+@@ -803,7 +803,7 @@ int vp8_estimate_entropy_savings(VP8_COMP *cpi) {
+   int new_intra, new_last, new_garf, oldtotal, newtotal;
+   int ref_frame_cost[MAX_REF_FRAMES];
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   if (cpi->common.frame_type != KEY_FRAME) {
+     if (!(new_intra = rf_intra * 255 / (rf_intra + rf_inter))) new_intra = 1;
+@@ -868,7 +868,7 @@ void vp8_update_coef_probs(VP8_COMP *cpi) {
+ #endif
+   int savings = 0;
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   do {
+     int j = 0;
+diff --git a/vp8/encoder/encodemv.c b/vp8/encoder/encodemv.c
+index 04adf105b..9ac316173 100644
+--- a/vp8/encoder/encodemv.c
++++ b/vp8/encoder/encodemv.c
+@@ -121,7 +121,7 @@ void vp8_build_component_cost_table(int *mvcost[2], const MV_CONTEXT *mvc,
+   unsigned int cost0 = 0;
+   unsigned int cost1 = 0;
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   i = 1;
+ 
+diff --git a/vp8/encoder/firstpass.c b/vp8/encoder/firstpass.c
+index 4ea991e52..d8914ba9b 100644
+--- a/vp8/encoder/firstpass.c
++++ b/vp8/encoder/firstpass.c
+@@ -500,7 +500,7 @@ void vp8_first_pass(VP8_COMP *cpi) {
+ 
+   zero_ref_mv.as_int = 0;
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   x->src = *cpi->Source;
+   xd->pre = *lst_yv12;
+@@ -742,10 +742,10 @@ void vp8_first_pass(VP8_COMP *cpi) {
+     /* extend the recon for intra prediction */
+     vp8_extend_mb_row(new_yv12, xd->dst.y_buffer + 16, xd->dst.u_buffer + 8,
+                       xd->dst.v_buffer + 8);
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+   }
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   {
+     double weight = 0.0;
+ 
+@@ -1655,7 +1655,7 @@ static void define_gf_group(VP8_COMP *cpi, FIRSTPASS_STATS *this_frame) {
+   cpi->twopass.gf_group_bits = 0;
+   cpi->twopass.gf_decay_rate = 0;
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   start_pos = cpi->twopass.stats_in;
+ 
+@@ -2270,7 +2270,7 @@ void vp8_second_pass(VP8_COMP *cpi) {
+     return;
+   }
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   if (EOF == input_stats(cpi, &this_frame)) return;
+ 
+@@ -2545,7 +2545,7 @@ static void find_next_key_frame(VP8_COMP *cpi, FIRSTPASS_STATS *this_frame) {
+ 
+   memset(&next_frame, 0, sizeof(next_frame));
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   start_position = cpi->twopass.stats_in;
+ 
+   cpi->common.frame_type = KEY_FRAME;
+diff --git a/vp8/encoder/onyx_if.c b/vp8/encoder/onyx_if.c
+index adc25024c..8844e58df 100644
+--- a/vp8/encoder/onyx_if.c
++++ b/vp8/encoder/onyx_if.c
+@@ -2345,7 +2345,7 @@ static uint64_t calc_plane_error(unsigned char *orig, int orig_stride,
+     recon += recon_stride;
+   }
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   return total_sse;
+ }
+ 
+@@ -2709,8 +2709,7 @@ static int decide_key_frame(VP8_COMP *cpi) {
+ 
+   if (cpi->Speed > 11) return 0;
+ 
+-  /* Clear down mmx registers */
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   if ((cpi->compressor_speed == 2) && (cpi->Speed >= 5) && (cpi->sf.RD == 0)) {
+     double change = 1.0 *
+@@ -3144,7 +3143,7 @@ void vp8_loopfilter_frame(VP8_COMP *cpi, VP8_COMMON *cm) {
+   } else {
+     struct vpx_usec_timer timer;
+ 
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     vpx_usec_timer_start(&timer);
+     if (cpi->sf.auto_filter == 0) {
+@@ -3231,8 +3230,7 @@ static void encode_frame_to_data_rate(VP8_COMP *cpi, size_t *size,
+   int drop_mark50 = drop_mark / 4;
+   int drop_mark25 = drop_mark / 8;
+ 
+-  /* Clear down mmx registers to allow floating point in what follows */
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   if (cpi->force_next_frame_intra) {
+     cm->frame_type = KEY_FRAME; /* delayed intra frame */
+@@ -3595,7 +3593,7 @@ static void encode_frame_to_data_rate(VP8_COMP *cpi, size_t *size,
+    * There is some odd behavior for one pass here that needs attention.
+    */
+   if ((cpi->pass == 2) || (cpi->ni_frames > 150)) {
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     Q = cpi->active_worst_quality;
+ 
+@@ -3823,7 +3821,7 @@ static void encode_frame_to_data_rate(VP8_COMP *cpi, size_t *size,
+ #endif
+ 
+   do {
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     vp8_set_quantizer(cpi, Q);
+ 
+@@ -3956,7 +3954,7 @@ static void encode_frame_to_data_rate(VP8_COMP *cpi, size_t *size,
+     cpi->projected_frame_size =
+         (cpi->projected_frame_size > 0) ? cpi->projected_frame_size : 0;
+ #endif
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     /* Test to see if the stats generated for this frame indicate that
+      * we should have coded a key frame (assuming that we didn't)!
+@@ -4000,7 +3998,7 @@ static void encode_frame_to_data_rate(VP8_COMP *cpi, size_t *size,
+ #endif
+     }
+ 
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     if (frame_over_shoot_limit == 0) frame_over_shoot_limit = 1;
+ 
+@@ -4587,7 +4585,7 @@ static void encode_frame_to_data_rate(VP8_COMP *cpi, size_t *size,
+     {
+         FILE *f = fopen("tmp.stt", "a");
+ 
+-        vpx_clear_system_state();
++        assert(vpx_check_system_state());
+ 
+         if (cpi->twopass.total_left_stats.coded_error != 0.0)
+             fprintf(f, "%10d %10d %10d %10d %10d %10"PRId64" %10"PRId64
+@@ -5016,8 +5014,7 @@ int vp8_get_compressed_data(VP8_COMP *cpi, unsigned int *frame_flags,
+   /* start with a 0 size frame */
+   *size = 0;
+ 
+-  /* Clear down mmx registers */
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   cm->frame_type = INTER_FRAME;
+   cm->frame_flags = *frame_flags;
+@@ -5170,7 +5167,7 @@ int vp8_get_compressed_data(VP8_COMP *cpi, unsigned int *frame_flags,
+ 
+           vp8_deblock(cm, cm->frame_to_show, &cm->post_proc_buffer,
+                       cm->filter_level * 10 / 6, 1, 0);
+-          vpx_clear_system_state();
++          assert(vpx_check_system_state());
+ 
+           ye = calc_plane_error(orig->y_buffer, orig->y_stride, pp->y_buffer,
+                                 pp->y_stride, y_width, y_height);
+@@ -5280,7 +5277,7 @@ int vp8_get_preview_raw_frame(VP8_COMP *cpi, YV12_BUFFER_CONFIG *dest,
+     }
+ 
+ #endif
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+     return ret;
+   }
+ }
+diff --git a/vp8/encoder/ratectrl.c b/vp8/encoder/ratectrl.c
+index ce07a6f19..61a25b524 100644
+--- a/vp8/encoder/ratectrl.c
++++ b/vp8/encoder/ratectrl.c
+@@ -296,8 +296,7 @@ static void calc_iframe_target_size(VP8_COMP *cpi) {
+   int kf_boost;
+   uint64_t target;
+ 
+-  /* Clear down mmx registers to allow floating point in what follows */
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   if (cpi->oxcf.fixed_q >= 0) {
+     int Q = cpi->oxcf.key_q;
+@@ -1032,8 +1031,7 @@ void vp8_update_rate_correction_factors(VP8_COMP *cpi, int damp_var) {
+ 
+   int projected_size_based_on_q = 0;
+ 
+-  /* Clear down mmx registers to allow floating point in what follows */
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   if (cpi->common.frame_type == KEY_FRAME) {
+     rate_correction_factor = cpi->key_frame_rate_correction_factor;
+@@ -1318,8 +1316,7 @@ static int estimate_keyframe_frequency(VP8_COMP *cpi) {
+ }
+ 
+ void vp8_adjust_key_frame_context(VP8_COMP *cpi) {
+-  /* Clear down mmx registers to allow floating point in what follows */
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   /* Do we have any key frame overspend to recover? */
+   /* Two-pass overspend handled elsewhere. */
+diff --git a/vp8/encoder/rdopt.c b/vp8/encoder/rdopt.c
+index 679d66bbf..e1f6690d8 100644
+--- a/vp8/encoder/rdopt.c
++++ b/vp8/encoder/rdopt.c
+@@ -166,7 +166,7 @@ void vp8_initialize_rd_consts(VP8_COMP *cpi, MACROBLOCK *x, int Qvalue) {
+   double capped_q = (Qvalue < 160) ? (double)Qvalue : 160.0;
+   double rdconst = 2.80;
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   /* Further tests required to see if optimum is different
+    * for key frames, golden frames and arf frames.
+diff --git a/vp8/vp8_dx_iface.c b/vp8/vp8_dx_iface.c
+index 7db77195b..480f36ef5 100644
+--- a/vp8/vp8_dx_iface.c
++++ b/vp8/vp8_dx_iface.c
+@@ -379,7 +379,7 @@ static vpx_codec_err_t vp8_decode(vpx_codec_alg_priv_t *ctx,
+            * reallocation is attempted on resync. */
+           ctx->si.w = 0;
+           ctx->si.h = 0;
+-          vpx_clear_system_state();
++          assert(vpx_check_system_state());
+           /* same return value as used in vp8dx_receive_compressed_data */
+           return -1;
+         }
+diff --git a/vp9/common/vp9_postproc.c b/vp9/common/vp9_postproc.c
+index 5373b0218..9be053674 100644
+--- a/vp9/common/vp9_postproc.c
++++ b/vp9/common/vp9_postproc.c
+@@ -306,7 +306,7 @@ int vp9_post_proc_frame(struct VP9Common *cm, YV12_BUFFER_CONFIG *dest,
+     return 0;
+   }
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   // Alloc memory for prev_mip in the first frame.
+   if (cm->current_video_frame == 1) {
+@@ -408,7 +408,7 @@ int vp9_post_proc_frame(struct VP9Common *cm, YV12_BUFFER_CONFIG *dest,
+     const int noise_level = ppflags->noise_level;
+     if (ppstate->last_q != q || ppstate->last_noise != noise_level) {
+       double sigma;
+-      vpx_clear_system_state();
++      assert(vpx_check_system_state());
+       sigma = noise_level + .5 + .6 * q / 63.0;
+       ppstate->clamp =
+           vpx_setup_noise(sigma, ppstate->generated_noise, cm->width + 256);
+diff --git a/vp9/decoder/vp9_decoder.c b/vp9/decoder/vp9_decoder.c
+index 7fde0b07f..3c53ef52c 100644
+--- a/vp9/decoder/vp9_decoder.c
++++ b/vp9/decoder/vp9_decoder.c
+@@ -406,7 +406,7 @@ int vp9_receive_compressed_data(VP9Decoder *pbi, size_t size,
+ 
+   swap_frame_buffers(pbi);
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   if (!cm->show_existing_frame) {
+     cm->last_show_frame = cm->show_frame;
+@@ -455,7 +455,7 @@ int vp9_get_raw_frame(VP9Decoder *pbi, YV12_BUFFER_CONFIG *sd,
+   *sd = *cm->frame_to_show;
+   ret = 0;
+ #endif /*!CONFIG_POSTPROC*/
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   return ret;
+ }
+ 
+diff --git a/vp9/encoder/vp9_aq_360.c b/vp9/encoder/vp9_aq_360.c
+index dba017ffc..e2c451483 100644
+--- a/vp9/encoder/vp9_aq_360.c
++++ b/vp9/encoder/vp9_aq_360.c
+@@ -48,7 +48,7 @@ void vp9_360aq_frame_setup(VP9_COMP *cpi) {
+ 
+     seg->abs_delta = SEGMENT_DELTADATA;
+ 
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     for (i = 0; i < MAX_SEGMENTS; ++i) {
+       int qindex_delta =
+diff --git a/vp9/encoder/vp9_aq_complexity.c b/vp9/encoder/vp9_aq_complexity.c
+index bd3812036..4dfdd8619 100644
+--- a/vp9/encoder/vp9_aq_complexity.c
++++ b/vp9/encoder/vp9_aq_complexity.c
+@@ -48,8 +48,7 @@ void vp9_setup_in_frame_q_adj(VP9_COMP *cpi) {
+   VP9_COMMON *const cm = &cpi->common;
+   struct segmentation *const seg = &cm->seg;
+ 
+-  // Make SURE use of floating point in this function is safe.
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   if (frame_is_intra_only(cm) || cm->error_resilient_mode ||
+       cpi->refresh_alt_ref_frame || cpi->force_update_segmentation ||
+@@ -131,7 +130,7 @@ void vp9_caq_select_segment(VP9_COMP *cpi, MACROBLOCK *mb, BLOCK_SIZE bs,
+     double low_var_thresh;
+     const int aq_strength = get_aq_c_strength(cm->base_qindex, cm->bit_depth);
+ 
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+     low_var_thresh = (cpi->oxcf.pass == 2) ? VPXMAX(cpi->twopass.mb_av_energy,
+                                                     MIN_DEFAULT_LV_THRESH)
+                                            : DEFAULT_LV_THRESH;
+diff --git a/vp9/encoder/vp9_aq_cyclicrefresh.c b/vp9/encoder/vp9_aq_cyclicrefresh.c
+index a2a742493..9ac124e6b 100644
+--- a/vp9/encoder/vp9_aq_cyclicrefresh.c
++++ b/vp9/encoder/vp9_aq_cyclicrefresh.c
+@@ -603,7 +603,7 @@ void vp9_cyclic_refresh_setup(VP9_COMP *const cpi) {
+     int qindex2;
+     const double q = vp9_convert_qindex_to_q(cm->base_qindex, cm->bit_depth);
+     cr->counter_encode_maxq_scene_change++;
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+     // Set rate threshold to some multiple (set to 2 for now) of the target
+     // rate (target is given by sb64_target_rate and scaled by 256).
+     cr->thresh_rate_sb = ((int64_t)(rc->sb64_target_rate) << 8) << 2;
+diff --git a/vp9/encoder/vp9_aq_variance.c b/vp9/encoder/vp9_aq_variance.c
+index 9cd8819c3..ec5a7b38a 100644
+--- a/vp9/encoder/vp9_aq_variance.c
++++ b/vp9/encoder/vp9_aq_variance.c
+@@ -57,7 +57,7 @@ void vp9_vaq_frame_setup(VP9_COMP *cpi) {
+ 
+     seg->abs_delta = SEGMENT_DELTADATA;
+ 
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     for (i = 0; i < MAX_SEGMENTS; ++i) {
+       int qindex_delta =
+@@ -189,7 +189,7 @@ static unsigned int block_variance(VP9_COMP *cpi, MACROBLOCK *x,
+ 
+ double vp9_log_block_var(VP9_COMP *cpi, MACROBLOCK *x, BLOCK_SIZE bs) {
+   unsigned int var = block_variance(cpi, x, bs);
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   return log(var + 1.0);
+ }
+ 
+@@ -231,7 +231,7 @@ void vp9_get_sub_block_energy(VP9_COMP *cpi, MACROBLOCK *mb, int mi_row,
+ int vp9_block_energy(VP9_COMP *cpi, MACROBLOCK *x, BLOCK_SIZE bs) {
+   double energy;
+   double energy_midpoint;
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   energy_midpoint =
+       (cpi->oxcf.pass == 2) ? cpi->twopass.mb_av_energy : DEFAULT_E_MIDPOINT;
+   energy = vp9_log_block_var(cpi, x, bs) - energy_midpoint;
+diff --git a/vp9/encoder/vp9_bitstream.c b/vp9/encoder/vp9_bitstream.c
+index 76b7b123d..4fe046b8f 100644
+--- a/vp9/encoder/vp9_bitstream.c
++++ b/vp9/encoder/vp9_bitstream.c
+@@ -1362,7 +1362,7 @@ void vp9_pack_bitstream(VP9_COMP *cpi, uint8_t *dest, size_t *size) {
+   uncompressed_hdr_size = vpx_wb_bytes_written(&wb);
+   data += uncompressed_hdr_size;
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   first_part_size = write_compressed_header(cpi, data);
+   data += first_part_size;
+diff --git a/vp9/encoder/vp9_blockiness.c b/vp9/encoder/vp9_blockiness.c
+index da68a3c3c..bea0e02c1 100644
+--- a/vp9/encoder/vp9_blockiness.c
++++ b/vp9/encoder/vp9_blockiness.c
+@@ -8,6 +8,7 @@
+  *  be found in the AUTHORS file in the root of the source tree.
+  */
+ #include <stdlib.h>
++#include <assert.h>
+ 
+ #include "vpx/vpx_integer.h"
+ #include "vpx_ports/system_state.h"
+@@ -118,7 +119,7 @@ double vp9_get_blockiness(const uint8_t *img1, int img1_pitch,
+                           int height) {
+   double blockiness = 0;
+   int i, j;
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   for (i = 0; i < height;
+        i += 4, img1 += img1_pitch * 4, img2 += img2_pitch * 4) {
+     for (j = 0; j < width; j += 4) {
+diff --git a/vp9/encoder/vp9_encodeframe.c b/vp9/encoder/vp9_encodeframe.c
+index 5adefac1a..2272b2790 100644
+--- a/vp9/encoder/vp9_encodeframe.c
++++ b/vp9/encoder/vp9_encodeframe.c
+@@ -1933,7 +1933,7 @@ static void rd_pick_sb_modes(VP9_COMP *cpi, TileDataEnc *tile_data,
+   const AQ_MODE aq_mode = cpi->oxcf.aq_mode;
+   int i, orig_rdmult;
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   // Use the lower precision, but faster, 32x32 fdct for mode selection.
+   x->use_lp32x32fdct = 1;
+@@ -3140,7 +3140,7 @@ static int ml_pruning_partition(VP9_COMMON *const cm, MACROBLOCKD *const xd,
+   float features[FEATURES];
+ 
+   assert(b_width_log2_lookup[bsize] == b_height_log2_lookup[bsize]);
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   switch (bsize) {
+     case BLOCK_64X64:
+@@ -3266,7 +3266,7 @@ static int ml_predict_breakout(VP9_COMP *const cpi, BLOCK_SIZE bsize,
+ #endif
+     var = var >> num_pels_log2;
+ 
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     rate_f = (float)VPXMIN(rd_cost->rate, INT_MAX);
+     dist_f = (float)(VPXMIN(rd_cost->dist, INT_MAX) >> num_pels_log2);
+@@ -3621,7 +3621,7 @@ static int get_rdmult_delta(VP9_COMP *cpi, BLOCK_SIZE bsize, int mi_row,
+     }
+   }
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   r0 = cpi->rd.r0;
+   rk = (double)intra_cost / mc_dep_cost;
+@@ -5756,7 +5756,7 @@ static void encode_frame_internal(VP9_COMP *cpi) {
+       }
+     }
+ 
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     if (tpl_frame->is_valid)
+       cpi->rd.r0 = (double)intra_cost_base / mc_dep_cost_base;
+diff --git a/vp9/encoder/vp9_encoder.c b/vp9/encoder/vp9_encoder.c
+index bf35b3570..b04fef2f8 100644
+--- a/vp9/encoder/vp9_encoder.c
++++ b/vp9/encoder/vp9_encoder.c
+@@ -643,7 +643,7 @@ VP9_LEVEL vp9_get_level(const Vp9LevelSpec *const level_spec) {
+   int i;
+   const Vp9LevelSpec *this_level;
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   for (i = 0; i < VP9_LEVELS; ++i) {
+     this_level = &vp9_level_defs[i];
+@@ -1415,7 +1415,7 @@ static void init_level_constraint(LevelConstraint *lc) {
+ }
+ 
+ static void set_level_constraint(LevelConstraint *ls, int8_t level_index) {
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   ls->level_index = level_index;
+   if (level_index >= 0) {
+     ls->max_cpb_size = vp9_level_defs[level_index].max_cpb_size * (double)1000;
+@@ -2480,7 +2480,7 @@ void vp9_remove_compressor(VP9_COMP *cpi) {
+   cm = &cpi->common;
+   if (cm->current_video_frame > 0) {
+ #if CONFIG_INTERNAL_STATS
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     if (cpi->oxcf.pass != 1) {
+       char headings[512] = { 0 };
+@@ -3108,7 +3108,7 @@ static void loopfilter_frame(VP9_COMP *cpi, VP9_COMMON *cm) {
+   } else {
+     struct vpx_usec_timer timer;
+ 
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     vpx_usec_timer_start(&timer);
+ 
+@@ -3309,7 +3309,7 @@ static void output_frame_level_debug_stats(VP9_COMP *cpi) {
+   FILE *const f = fopen("tmp.stt", cm->current_video_frame ? "a" : "w");
+   int64_t recon_err;
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+ #if CONFIG_VP9_HIGHBITDEPTH
+   if (cm->use_highbitdepth) {
+@@ -3699,7 +3699,7 @@ static int encode_without_recode_loop(VP9_COMP *cpi, size_t *size,
+   // The flag may get reset below based on SVC or resizing state.
+   cpi->compute_source_sad_onepass = cpi->oxcf.mode == REALTIME;
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   set_frame_size(cpi);
+ 
+@@ -3952,7 +3952,7 @@ static int encode_without_recode_loop(VP9_COMP *cpi, size_t *size,
+     // Check if encoded frame will overshoot too much, and if so, set the q and
+     // adjust some rate control parameters, and return to re-encode the frame.
+     if (vp9_encodedframe_overshoot(cpi, frame_size, &q)) {
+-      vpx_clear_system_state();
++      assert(vpx_check_system_state());
+       vp9_set_quantizer(cm, q);
+       vp9_set_variance_partition_thresholds(cpi, q, 0);
+       suppress_active_map(cpi);
+@@ -3979,7 +3979,7 @@ static int encode_without_recode_loop(VP9_COMP *cpi, size_t *size,
+   // Update the skip mb flag probabilities based on the distribution
+   // seen in the last encoder iteration.
+   // update_base_skip_probs(cpi);
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   return 1;
+ }
+ 
+@@ -4021,7 +4021,7 @@ static void encode_with_recode_loop(VP9_COMP *cpi, size_t *size,
+                                  : 0;
+ 
+   do {
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     set_frame_size(cpi);
+ 
+@@ -4117,7 +4117,7 @@ static void encode_with_recode_loop(VP9_COMP *cpi, size_t *size,
+     // seen in the last encoder iteration.
+     // update_base_skip_probs(cpi);
+ 
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     // Dummy pack of the bitstream using up to date stats to get an
+     // accurate estimate of output frame size to determine if we need
+@@ -4334,13 +4334,13 @@ static void encode_with_recode_loop(VP9_COMP *cpi, size_t *size,
+     const int thresh = compute_context_model_thresh(cpi);
+     const int diff = compute_context_model_diff(cm);
+     if (diff < thresh) {
+-      vpx_clear_system_state();
++      assert(vpx_check_system_state());
+       restore_coding_context(cpi);
+       return;
+     }
+ 
+     vp9_encode_frame(cpi);
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+     restore_coding_context(cpi);
+   }
+ }
+@@ -4708,7 +4708,7 @@ static void encode_frame_to_data_rate(VP9_COMP *cpi, size_t *size,
+   }
+ 
+   set_ext_overrides(cpi);
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+ #ifdef ENABLE_KF_DENOISE
+   // Spatial denoise of key frame.
+@@ -4757,7 +4757,7 @@ static void encode_frame_to_data_rate(VP9_COMP *cpi, size_t *size,
+     }
+   }
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+ #if CONFIG_INTERNAL_STATS
+   memset(cpi->mode_chosen_counts, 0,
+@@ -5181,7 +5181,7 @@ static void level_rc_framerate(VP9_COMP *cpi, int arf_src_index) {
+   LevelConstraint *const ls = &cpi->level_constraint;
+   VP9_COMMON *const cm = &cpi->common;
+   const double max_cpb_size = ls->max_cpb_size;
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   rc->max_frame_bandwidth = VPXMIN(rc->max_frame_bandwidth, ls->max_frame_size);
+   if (frame_is_intra_only(cm)) {
+     rc->max_frame_bandwidth =
+@@ -5208,7 +5208,7 @@ static void update_level_info(VP9_COMP *cpi, size_t *size, int arf_src_index) {
+   const int8_t level_index = level_constraint->level_index;
+   double cpb_data_size;
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   // update level_stats
+   level_stats->total_compressed_size += *size;
+@@ -5836,7 +5836,7 @@ double get_feature_score(uint8_t *buf, ptrdiff_t stride, int rows, int cols) {
+   double IyIy = 0;
+   double score;
+   int r, c;
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   for (r = 0; r + 1 < rows; ++r) {
+     for (c = 0; c + 1 < cols; ++c) {
+       int diff_x = buf[r * stride + c] - buf[r * stride + c + 1];
+@@ -6674,8 +6674,7 @@ int vp9_get_compressed_data(VP9_COMP *cpi, unsigned int *frame_flags,
+     cpi->last_end_time_stamp_seen = source->ts_start;
+   }
+ 
+-  // Clear down mmx registers
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   // adjust frame rates based on timestamps given
+   if (cm->show_frame) {
+@@ -6853,7 +6852,7 @@ int vp9_get_compressed_data(VP9_COMP *cpi, unsigned int *frame_flags,
+                                 cpi->un_scaled_source->y_width);
+           }
+ #endif
+-          vpx_clear_system_state();
++          assert(vpx_check_system_state());
+ 
+ #if CONFIG_VP9_HIGHBITDEPTH
+           vpx_calc_highbd_psnr(orig, pp, &psnr2, cpi->td.mb.e_mbd.bd,
+@@ -6967,7 +6966,7 @@ int vp9_get_compressed_data(VP9_COMP *cpi, unsigned int *frame_flags,
+     }
+   }
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   return 0;
+ }
+ 
+@@ -6996,7 +6995,7 @@ int vp9_get_preview_raw_frame(VP9_COMP *cpi, YV12_BUFFER_CONFIG *dest,
+       ret = -1;
+     }
+ #endif  // !CONFIG_VP9_POSTPROC
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+     return ret;
+   }
+ }
+diff --git a/vp9/encoder/vp9_firstpass.c b/vp9/encoder/vp9_firstpass.c
+index 8f0da48a2..2c99e4ab3 100644
+--- a/vp9/encoder/vp9_firstpass.c
++++ b/vp9/encoder/vp9_firstpass.c
+@@ -898,7 +898,7 @@ void vp9_first_pass_encode_tile_mb_row(VP9_COMP *cpi, ThreadData *td,
+                           mb_row * uv_mb_height * x->plane[1].src.stride +
+                           mb_col * uv_mb_height;
+ 
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     xd->plane[0].dst.buf = new_yv12->y_buffer + recon_yoffset;
+     xd->plane[1].dst.buf = new_yv12->u_buffer + recon_uvoffset;
+@@ -974,7 +974,7 @@ void vp9_first_pass_encode_tile_mb_row(VP9_COMP *cpi, ThreadData *td,
+     }
+ #endif  // CONFIG_VP9_HIGHBITDEPTH
+ 
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+     log_intra = log(this_error + 1.0);
+     if (log_intra < 10.0) {
+       mb_intra_factor = 1.0 + ((10.0 - log_intra) * 0.05);
+@@ -1170,7 +1170,7 @@ void vp9_first_pass_encode_tile_mb_row(VP9_COMP *cpi, ThreadData *td,
+ #endif
+ 
+       if (motion_error <= this_error) {
+-        vpx_clear_system_state();
++        assert(vpx_check_system_state());
+ 
+         // Keep a count of cases where the inter and intra were very close
+         // and very low. This helps with scene cut detection for example in
+@@ -1315,7 +1315,7 @@ void vp9_first_pass_encode_tile_mb_row(VP9_COMP *cpi, ThreadData *td,
+     (*(cpi->row_mt_sync_write_ptr))(&tile_data->row_mt_sync, mb_row, c,
+                                     num_mb_cols);
+   }
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ }
+ 
+ static void first_pass_encode(VP9_COMP *cpi, FIRSTPASS_DATA *fp_acc_data) {
+@@ -1351,7 +1351,7 @@ void vp9_first_pass(VP9_COMP *cpi, const struct lookahead_entry *source) {
+   FIRSTPASS_DATA fp_temp_data;
+   FIRSTPASS_DATA *fp_acc_data = &fp_temp_data;
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   vp9_zero(fp_temp_data);
+   fp_acc_data->image_data_start_row = INVALID_ROW;
+ 
+@@ -2457,7 +2457,7 @@ static void define_gf_group(VP9_COMP *cpi, FIRSTPASS_STATS *this_frame) {
+     vp9_zero(twopass->gf_group);
+   }
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   vp9_zero(next_frame);
+ 
+   // Load stats for the current frame.
+@@ -3154,7 +3154,7 @@ void vp9_rc_get_second_pass_params(VP9_COMP *cpi) {
+     return;
+   }
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   if (cpi->oxcf.rc_mode == VPX_Q) {
+     twopass->active_worst_quality = cpi->oxcf.cq_level;
+diff --git a/vp9/encoder/vp9_mbgraph.c b/vp9/encoder/vp9_mbgraph.c
+index 831c79c17..adce9a5b0 100644
+--- a/vp9/encoder/vp9_mbgraph.c
++++ b/vp9/encoder/vp9_mbgraph.c
+@@ -396,7 +396,7 @@ void vp9_update_mbgraph_stats(VP9_COMP *cpi) {
+                                cpi->Source);
+   }
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   separate_arf_mbs(cpi);
+ }
+diff --git a/vp9/encoder/vp9_ratectrl.c b/vp9/encoder/vp9_ratectrl.c
+index 5ad68e2e5..840f435ad 100644
+--- a/vp9/encoder/vp9_ratectrl.c
++++ b/vp9/encoder/vp9_ratectrl.c
+@@ -729,8 +729,7 @@ void vp9_rc_update_rate_correction_factors(VP9_COMP *cpi) {
+   // Do not update the rate factors for arf overlay frames.
+   if (cpi->rc.is_src_frame_alt_ref) return;
+ 
+-  // Clear down mmx registers to allow floating point in what follows
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   // Work out how big we would have expected the frame to be at this Q given
+   // the current correction factor.
+@@ -1237,7 +1236,7 @@ static int rc_pick_q_and_bounds_one_pass_vbr(const VP9_COMP *cpi,
+ #if LIMIT_QRANGE_FOR_ALTREF_AND_KEY
+   {
+     int qdelta = 0;
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+ 
+     // Limit Q range for the adaptive loop.
+     if (cm->frame_type == KEY_FRAME && !rc->this_key_frame_forced &&
+@@ -1482,7 +1481,7 @@ static int rc_pick_q_and_bounds_two_pass(const VP9_COMP *cpi, int *bottom_index,
+   }
+ 
+ #if LIMIT_QRANGE_FOR_ALTREF_AND_KEY
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   // Static forced key frames Q restrictions dealt with elsewhere.
+   if (!frame_is_intra_only(cm) || !rc->this_key_frame_forced ||
+       cpi->twopass.last_kfgroup_zeromotion_pct < STATIC_MOTION_THRESH) {
+diff --git a/vp9/encoder/vp9_rd.c b/vp9/encoder/vp9_rd.c
+index 894b1497b..eff6e9726 100644
+--- a/vp9/encoder/vp9_rd.c
++++ b/vp9/encoder/vp9_rd.c
+@@ -316,7 +316,7 @@ void vp9_initialize_rd_consts(VP9_COMP *cpi) {
+   RD_OPT *const rd = &cpi->rd;
+   int i;
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   rd->RDDIV = RDDIV_BITS;  // In bits (to multiply D by 128).
+   rd->RDMULT = vp9_compute_rd_mult(cpi, cm->base_qindex + cm->y_dc_delta_q);
+diff --git a/vp9/encoder/vp9_rdopt.c b/vp9/encoder/vp9_rdopt.c
+index 86f72359a..4fa028cc0 100644
+--- a/vp9/encoder/vp9_rdopt.c
++++ b/vp9/encoder/vp9_rdopt.c
+@@ -3086,60 +3086,56 @@ int vp9_internal_image_edge(VP9_COMP *cpi) {
+ // In most cases this is the "real" edge unless there are formatting
+ // bars embedded in the stream.
+ int vp9_active_h_edge(VP9_COMP *cpi, int mi_row, int mi_step) {
+-  vpx_clear_system_state();
+-  {
+-    int top_edge = 0;
+-    int bottom_edge = cpi->common.mi_rows;
+-    int is_active_h_edge = 0;
+-
+-    // For two pass account for any formatting bars detected.
+-    if (cpi->oxcf.pass == 2) {
+-      TWO_PASS *twopass = &cpi->twopass;
+-
+-      // The inactive region is specified in MBs not mi units.
+-      // The image edge is in the following MB row.
+-      top_edge += (int)(twopass->this_frame_stats.inactive_zone_rows * 2);
+-
+-      bottom_edge -= (int)(twopass->this_frame_stats.inactive_zone_rows * 2);
+-      bottom_edge = VPXMAX(top_edge, bottom_edge);
+-    }
++  int top_edge = 0;
++  int bottom_edge = cpi->common.mi_rows;
++  int is_active_h_edge = 0;
+ 
+-    if (((top_edge >= mi_row) && (top_edge < (mi_row + mi_step))) ||
+-        ((bottom_edge >= mi_row) && (bottom_edge < (mi_row + mi_step)))) {
+-      is_active_h_edge = 1;
+-    }
+-    return is_active_h_edge;
++  assert(vpx_check_system_state());
++  // For two pass account for any formatting bars detected.
++  if (cpi->oxcf.pass == 2) {
++    TWO_PASS *twopass = &cpi->twopass;
++
++    // The inactive region is specified in MBs not mi units.
++    // The image edge is in the following MB row.
++    top_edge += (int)(twopass->this_frame_stats.inactive_zone_rows * 2);
++
++    bottom_edge -= (int)(twopass->this_frame_stats.inactive_zone_rows * 2);
++    bottom_edge = VPXMAX(top_edge, bottom_edge);
++  }
++
++  if (((top_edge >= mi_row) && (top_edge < (mi_row + mi_step))) ||
++      ((bottom_edge >= mi_row) && (bottom_edge < (mi_row + mi_step)))) {
++    is_active_h_edge = 1;
+   }
++  return is_active_h_edge;
+ }
+ 
+ // Checks to see if a super block is on a vertical image edge.
+ // In most cases this is the "real" edge unless there are formatting
+ // bars embedded in the stream.
+ int vp9_active_v_edge(VP9_COMP *cpi, int mi_col, int mi_step) {
+-  vpx_clear_system_state();
+-  {
+-    int left_edge = 0;
+-    int right_edge = cpi->common.mi_cols;
+-    int is_active_v_edge = 0;
+-
+-    // For two pass account for any formatting bars detected.
+-    if (cpi->oxcf.pass == 2) {
+-      TWO_PASS *twopass = &cpi->twopass;
+-
+-      // The inactive region is specified in MBs not mi units.
+-      // The image edge is in the following MB row.
+-      left_edge += (int)(twopass->this_frame_stats.inactive_zone_cols * 2);
+-
+-      right_edge -= (int)(twopass->this_frame_stats.inactive_zone_cols * 2);
+-      right_edge = VPXMAX(left_edge, right_edge);
+-    }
++  int left_edge = 0;
++  int right_edge = cpi->common.mi_cols;
++  int is_active_v_edge = 0;
+ 
+-    if (((left_edge >= mi_col) && (left_edge < (mi_col + mi_step))) ||
+-        ((right_edge >= mi_col) && (right_edge < (mi_col + mi_step)))) {
+-      is_active_v_edge = 1;
+-    }
+-    return is_active_v_edge;
++  assert(vpx_check_system_state());
++  // For two pass account for any formatting bars detected.
++  if (cpi->oxcf.pass == 2) {
++    TWO_PASS *twopass = &cpi->twopass;
++
++    // The inactive region is specified in MBs not mi units.
++    // The image edge is in the following MB row.
++    left_edge += (int)(twopass->this_frame_stats.inactive_zone_cols * 2);
++
++    right_edge -= (int)(twopass->this_frame_stats.inactive_zone_cols * 2);
++    right_edge = VPXMAX(left_edge, right_edge);
++  }
++
++  if (((left_edge >= mi_col) && (left_edge < (mi_col + mi_step))) ||
++      ((right_edge >= mi_col) && (right_edge < (mi_col + mi_step)))) {
++    is_active_v_edge = 1;
+   }
++  return is_active_v_edge;
+ }
+ 
+ // Checks to see if a super block is at the edge of the active image.
+diff --git a/vp9/vp9_cx_iface.c b/vp9/vp9_cx_iface.c
+index 85f83a662..662b6763b 100644
+--- a/vp9/vp9_cx_iface.c
++++ b/vp9/vp9_cx_iface.c
+@@ -402,7 +402,7 @@ static void config_target_level(VP9EncoderConfig *oxcf) {
+   int max_over_shoot_pct;
+   const int target_level_index = get_level_index(oxcf->target_level);
+ 
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   assert(target_level_index >= 0);
+   assert(target_level_index < VP9_LEVELS);
+ 
+@@ -1125,7 +1125,7 @@ static vpx_codec_err_t encoder_encode(vpx_codec_alg_priv_t *ctx,
+   if (setjmp(cpi->common.error.jmp)) {
+     cpi->common.error.setjmp = 0;
+     res = update_error_state(ctx, &cpi->common.error);
+-    vpx_clear_system_state();
++    assert(vpx_check_system_state());
+     return res;
+   }
+   cpi->common.error.setjmp = 1;
+diff --git a/vpx_dsp/fastssim.c b/vpx_dsp/fastssim.c
+index 27d4bbaf0..06a1332b9 100644
+--- a/vpx_dsp/fastssim.c
++++ b/vpx_dsp/fastssim.c
+@@ -473,7 +473,7 @@ double vpx_calc_fastssim(const YV12_BUFFER_CONFIG *source,
+                          uint32_t in_bd) {
+   double ssimv;
+   uint32_t bd_shift = 0;
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   assert(bd >= in_bd);
+   bd_shift = bd - in_bd;
+ 
+diff --git a/vpx_dsp/psnrhvs.c b/vpx_dsp/psnrhvs.c
+index 3b533decd..fbd3a4b2a 100644
+--- a/vpx_dsp/psnrhvs.c
++++ b/vpx_dsp/psnrhvs.c
+@@ -256,7 +256,7 @@ double vpx_psnrhvs(const YV12_BUFFER_CONFIG *src,
+   const double par = 1.0;
+   const int step = 7;
+   uint32_t bd_shift = 0;
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+ 
+   assert(bd == 8 || bd == 10 || bd == 12);
+   assert(bd >= in_bd);
+diff --git a/vpx_dsp/ssim.c b/vpx_dsp/ssim.c
+index 7c3c31bad..4852cb240 100644
+--- a/vpx_dsp/ssim.c
++++ b/vpx_dsp/ssim.c
+@@ -279,7 +279,7 @@ double vpx_get_ssim_metrics(uint8_t *img1, int img1_pitch, uint8_t *img2,
+   int c = 0;
+   double norm;
+   double old_ssim_total = 0;
+-  vpx_clear_system_state();
++  assert(vpx_check_system_state());
+   // We can sample points as frequently as we like start with 1 per 4x4.
+   for (i = 0; i < height;
+        i += 4, img1 += img1_pitch * 4, img2 += img2_pitch * 4) {
+diff --git a/vpx_dsp/x86/deblock_sse2.asm b/vpx_dsp/x86/deblock_sse2.asm
+index 9d8e5e3e0..e691c199e 100644
+--- a/vpx_dsp/x86/deblock_sse2.asm
++++ b/vpx_dsp/x86/deblock_sse2.asm
+@@ -220,6 +220,7 @@ sym(vpx_post_proc_down_and_across_mb_row_sse2):
+         dec         rcx                          ;decrement count
+         jnz         .nextrow                     ;next row
+ 
++    emms
+     add rsp, 16
+     pop rsp
+     ; begin epilog
+@@ -412,6 +413,7 @@ sym(vpx_mbpost_proc_across_ip_sse2):
+         cmp dword arg(2), 0
+         jg .ip_row_loop
+ 
++    emms
+     add         rsp, 16
+     pop         rsp
+ 
+diff --git a/vpx_dsp/x86/sad_sse3.asm b/vpx_dsp/x86/sad_sse3.asm
+index 175dcc089..cd63055fd 100644
+--- a/vpx_dsp/x86/sad_sse3.asm
++++ b/vpx_dsp/x86/sad_sse3.asm
+@@ -274,6 +274,7 @@ sym(vpx_sad8x16x3_sse3):
+         movq            [rcx],      mm5
+         movd            [rcx+8],    mm7
+ 
++    emms
+     STACK_FRAME_DESTROY_X3
+ 
+ ;void int vpx_sad8x8x3_sse3(
+@@ -299,6 +300,7 @@ sym(vpx_sad8x8x3_sse3):
+         movq            [rcx],      mm5
+         movd            [rcx+8],    mm7
+ 
++    emms
+     STACK_FRAME_DESTROY_X3
+ 
+ ;void int vpx_sad4x4x3_sse3(
+@@ -373,4 +375,5 @@ sym(vpx_sad4x4x3_sse3):
+         movq            [rcx],      mm1
+         movd            [rcx+8],    mm7
+ 
++    emms
+     STACK_FRAME_DESTROY_X3
+diff --git a/vpx_dsp/x86/subtract_sse2.asm b/vpx_dsp/x86/subtract_sse2.asm
+index 99c7570bc..ad1776047 100644
+--- a/vpx_dsp/x86/subtract_sse2.asm
++++ b/vpx_dsp/x86/subtract_sse2.asm
+@@ -123,4 +123,5 @@ INIT_MMX
+   lea                predq, [predq+pred_strideq*2]
+   sub                rowsd, 2
+   jg .loop_4
++  emms
+   RET
+diff --git a/vpx_ports/emms_mmx.asm b/vpx_ports/emms_mmx.asm
+index 9f33590a2..58091b4d6 100644
+--- a/vpx_ports/emms_mmx.asm
++++ b/vpx_ports/emms_mmx.asm
+@@ -16,3 +16,23 @@ global sym(vpx_clear_system_state) PRIVATE
+ sym(vpx_clear_system_state):
+     emms
+     ret
++
++%macro CHECK_TAG 1
++    fstenv   [rsp + %1]
++    movsx    eax, word [rsp + %1 + 8]
++    add      eax, 1
++    sbb      eax, eax
++%endmacro
++
++global sym(vpx_check_system_state) PRIVATE
++sym(vpx_check_system_state):
++%if LIBVPX_YASM_WIN64
++    CHECK_TAG 8    ; shadow space
++%elif ARCH_X86_64
++    CHECK_TAG -40  ; red zone
++%else
++    sub      esp, 28
++    CHECK_TAG 0
++    add      esp, 28
++%endif
++    ret
+diff --git a/vpx_ports/emms_mmx.c b/vpx_ports/emms_mmx.c
+deleted file mode 100644
+index f1036b98e..000000000
+--- a/vpx_ports/emms_mmx.c
++++ /dev/null
+@@ -1,15 +0,0 @@
+-/*
+- *  Copyright (c) 2018 The WebM project authors. All Rights Reserved.
+- *
+- *  Use of this source code is governed by a BSD-style license
+- *  that can be found in the LICENSE file in the root of the source
+- *  tree. An additional intellectual property rights grant can be found
+- *  in the file PATENTS.  All contributing project authors may
+- *  be found in the AUTHORS file in the root of the source tree.
+- */
+-
+-#include <mmintrin.h>
+-
+-#include "vpx_ports/system_state.h"
+-
+-void vpx_clear_system_state() { _mm_empty(); }
+diff --git a/vpx_ports/system_state.h b/vpx_ports/system_state.h
+index 03557e4bd..23e27775d 100644
+--- a/vpx_ports/system_state.h
++++ b/vpx_ports/system_state.h
+@@ -18,9 +18,11 @@ extern "C" {
+ #endif
+ 
+ #if (ARCH_X86 || ARCH_X86_64) && HAVE_MMX
+-extern void vpx_clear_system_state();
++extern void vpx_clear_system_state(void);
++extern int vpx_check_system_state(void);
+ #else
+ #define vpx_clear_system_state()
++#define vpx_check_system_state() 1
+ #endif  // (ARCH_X86 || ARCH_X86_64) && HAVE_MMX
+ 
+ #ifdef __cplusplus
+diff --git a/vpx_ports/vpx_ports.mk b/vpx_ports/vpx_ports.mk
+index aa9faf15e..64e47e53c 100644
+--- a/vpx_ports/vpx_ports.mk
++++ b/vpx_ports/vpx_ports.mk
+@@ -17,13 +17,7 @@ PORTS_SRCS-yes += msvc.h
+ PORTS_SRCS-yes += system_state.h
+ PORTS_SRCS-yes += vpx_timer.h
+ 
+-ifeq ($(ARCH_X86),yes)
+-PORTS_SRCS-$(HAVE_MMX) += emms_mmx.c
+-endif
+-ifeq ($(ARCH_X86_64),yes)
+-# Visual Studio x64 does not support the _mm_empty() intrinsic.
+ PORTS_SRCS-$(HAVE_MMX) += emms_mmx.asm
+-endif
+ 
+ ifeq ($(ARCH_X86_64),yes)
+ PORTS_SRCS-$(CONFIG_MSVS) += float_control_word.asm
+-- 
+2.21.0
+

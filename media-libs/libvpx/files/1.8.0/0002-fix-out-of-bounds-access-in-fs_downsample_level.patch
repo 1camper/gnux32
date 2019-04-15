@@ -1,0 +1,55 @@
+From 52f6db5f8ad1ad8538f3089fabf179338dde7467 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Fri, 21 Sep 2018 16:42:24 +0200
+Subject: [PATCH 2/5] fix out of bounds access in fs_downsample_level
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Typical off by one error, causes weird integer overflows in
+fs_calc_structure or possibly other places as bad values
+propagate.
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: Idb804bf9f92a17388d3aff4f1a189be77a836599
+---
+ vpx_dsp/fastssim.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/vpx_dsp/fastssim.c b/vpx_dsp/fastssim.c
+index 0469071a1..27d4bbaf0 100644
+--- a/vpx_dsp/fastssim.c
++++ b/vpx_dsp/fastssim.c
+@@ -122,12 +122,12 @@ static void fs_downsample_level(fs_ctx *_ctx, int _l) {
+     int j0offs;
+     int j1offs;
+     j0offs = 2 * j * w2;
+-    j1offs = FS_MINI(2 * j + 1, h2) * w2;
++    j1offs = FS_MINI(2 * j + 1, h2 - 1) * w2;
+     for (i = 0; i < w; i++) {
+       int i0;
+       int i1;
+       i0 = 2 * i;
+-      i1 = FS_MINI(i0 + 1, w2);
++      i1 = FS_MINI(i0 + 1, w2 - 1);
+       dst1[j * w + i] = src1[j0offs + i0] + src1[j0offs + i1] +
+                         src1[j1offs + i0] + src1[j1offs + i1];
+       dst2[j * w + i] = src2[j0offs + i0] + src2[j0offs + i1] +
+@@ -154,12 +154,12 @@ static void fs_downsample_level0(fs_ctx *_ctx, const uint8_t *_src1,
+     int j0;
+     int j1;
+     j0 = 2 * j;
+-    j1 = FS_MINI(j0 + 1, _h);
++    j1 = FS_MINI(j0 + 1, _h - 1);
+     for (i = 0; i < w; i++) {
+       int i0;
+       int i1;
+       i0 = 2 * i;
+-      i1 = FS_MINI(i0 + 1, _w);
++      i1 = FS_MINI(i0 + 1, _w - 1);
+       if (bd == 8 && shift == 0) {
+         dst1[j * w + i] =
+             _src1[j0 * _s1ystride + i0] + _src1[j0 * _s1ystride + i1] +
+-- 
+2.21.0
+

@@ -1,0 +1,55 @@
+From 34e828b2b090294066602d9cb1fdf21345c000ea Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 23 Sep 2018 15:16:08 +0200
+Subject: [PATCH 5/5] fix integer overflow in similarity
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+For 12 bit depth all inner multiplications need to be done using
+64 bit arithmetic.
+The intermediates ssim_n and ssim_d then require even more than 64
+bit, so we should convert to double first.
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: Iee7d1a61397727f5f33880ad4bc593f3dea5d6c5
+---
+ vpx_dsp/ssim.c | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/vpx_dsp/ssim.c b/vpx_dsp/ssim.c
+index 4852cb240..5684cef1e 100644
+--- a/vpx_dsp/ssim.c
++++ b/vpx_dsp/ssim.c
+@@ -70,8 +70,8 @@ static const int64_t cc2_10 = 3857925;   // (64^2*(.03*1023)^2
+ static const int64_t cc1_12 = 6868593;   // (64^2*(.01*4095)^2
+ static const int64_t cc2_12 = 61817334;  // (64^2*(.03*4095)^2
+ 
+-static double similarity(uint32_t sum_s, uint32_t sum_r, uint32_t sum_sq_s,
+-                         uint32_t sum_sq_r, uint32_t sum_sxr, int count,
++static double similarity(uint64_t sum_s, uint64_t sum_r, uint64_t sum_sq_s,
++                         uint64_t sum_sq_r, uint64_t sum_sxr, int count,
+                          uint32_t bd) {
+   double ssim_n, ssim_d;
+   int64_t c1, c2;
+@@ -90,12 +90,12 @@ static double similarity(uint32_t sum_s, uint32_t sum_r, uint32_t sum_sq_s,
+     assert(0);
+   }
+ 
+-  ssim_n = (2.0 * sum_s * sum_r + c1) *
+-           (2.0 * count * sum_sxr - 2.0 * sum_s * sum_r + c2);
++  ssim_n = (double)(2 * sum_s * sum_r + c1) *
++           (2 * count * sum_sxr - 2 * sum_s * sum_r + c2);
+ 
+-  ssim_d = ((double)sum_s * sum_s + (double)sum_r * sum_r + c1) *
+-           ((double)count * sum_sq_s - (double)sum_s * sum_s +
+-            (double)count * sum_sq_r - (double)sum_r * sum_r + c2);
++  ssim_d = (double)(sum_s * sum_s + sum_r * sum_r + c1) *
++           (count * sum_sq_s - sum_s * sum_s +
++            count * sum_sq_r - sum_r * sum_r + c2);
+ 
+   return ssim_n / ssim_d;
+ }
+-- 
+2.21.0
+
