@@ -1549,7 +1549,7 @@ index cc4cdde34a..99fc85db0e 100644
 2.21.0
 
 
-From b7506c966cf8cea33d702e97232461c5c3ab877f Mon Sep 17 00:00:00 2001
+From 0a3a29fdc315f102b985c3821e4dfdf64d377d0f Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sat, 8 Sep 2018 10:00:42 +0200
 Subject: [PATCH 06/17] configure: x32 support
@@ -1559,36 +1559,52 @@ Content-Transfer-Encoding: 8bit
 
 Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
 ---
- configure | 10 ++++------
- 1 file changed, 4 insertions(+), 6 deletions(-)
+ configure | 13 +++++--------
+ 1 file changed, 5 insertions(+), 8 deletions(-)
 
 diff --git a/configure b/configure
-index 9fe7760822..f126f87f99 100755
+index 9fe7760822..9a8229ba27 100755
 --- a/configure
 +++ b/configure
-@@ -4883,13 +4883,11 @@ case "$arch" in
-         spic=$shared
+@@ -3362,6 +3362,7 @@ pkg_config_default=pkg-config
+ ranlib_default="ranlib"
+ strip_default="strip"
+ version_script='--version-script'
++objformat="elf32"
+ x86asmexe_default="nasm"
+ windres_default="windres"
+ nvcc_default="nvcc"
+@@ -4884,12 +4885,10 @@ case "$arch" in
      ;;
      x86)
--        check_64bit x86_32 x86_64 'sizeof(void *) > 4'
+         check_64bit x86_32 x86_64 'sizeof(void *) > 4'
 -        # Treat x32 as x64 for now. Note it also needs spic=$shared
-+        check_64bit x86_32 x86_64
-+        enabled x86_64 && objformat=elf64
-         test "$subarch" = "x86_32" && check_cpp_condition stddef.h 'defined(__x86_64__)' &&
+-        test "$subarch" = "x86_32" && check_cpp_condition stddef.h 'defined(__x86_64__)' &&
 -            subarch=x86_64
 -        if test "$subarch" = "x86_64"; then
 -            spic=$shared
 -        fi
++        test "$subarch" = "x86_64" && enable x86_64 && objformat=elf64
++        test "$subarch" = "x86_32" && enable x86_32 && check_cpp_condition stddef.h 'defined(__x86_64__)' &&
 +            subarch=x86_64 && enable x86_64 && disable x86_32 && objformat=elfx32
 +        enabled x86_64 && enabled shared && enable_weak pic
      ;;
      ppc)
          check_cc <<EOF && subarch="ppc64"
+@@ -4901,8 +4900,6 @@ esac
+ enable $subarch
+ enabled spic && enable_weak pic
+ 
+-enabled x86_64 && objformat=elf64 || objformat="elf32"
+-
+ # OS specific
+ case $target_os in
+     aix)
 -- 
 2.21.0
 
 
-From edbdd82e85f68f78e1089a23fd8f1b38906b519b Mon Sep 17 00:00:00 2001
+From 54e8b83f6a34ad9df7d9fcfaae170c1ab688e616 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Mon, 17 Sep 2018 18:40:12 +0200
 Subject: [PATCH 07/17] x32 support: libavutil/x86/x86inc.asm
@@ -2129,7 +2145,7 @@ index 6a054a3e09..0286e26741 100644
 2.21.0
 
 
-From b26b3c473fa653d1e201d5de7d00a8baf079226a Mon Sep 17 00:00:00 2001
+From 8d3c250fdffdba2bd736534033bcb6d7f9987596 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Tue, 18 Sep 2018 07:46:15 +0200
 Subject: [PATCH 08/17] x32: libavutil/x86/imgutils.asm
@@ -2167,7 +2183,7 @@ index 3cca56cdca..ae0ca3b8b2 100644
 2.21.0
 
 
-From ddc695b871e46955665e0495f0486ddbef340242 Mon Sep 17 00:00:00 2001
+From 034a283ba8f9a48c3064c63e6d62770cb7cdddde Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Tue, 18 Sep 2018 08:37:51 +0200
 Subject: [PATCH 09/17] x32: libavutil/x86/pixelutils.asm
@@ -2288,7 +2304,7 @@ index 7af3007d0c..db2d6f63f1 100644
 2.21.0
 
 
-From 4d9ddc1ac80eb99365c0e4b90901d1b8c16f8510 Mon Sep 17 00:00:00 2001
+From e4f574d985f8d69751cbf48e6ca697dc2a7ab925 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sat, 20 Apr 2019 15:04:57 +0200
 Subject: [PATCH 10/17] x32: tests/checkasm.asm
@@ -2329,7 +2345,7 @@ index 683aae80e3..ef7265024a 100644
 2.21.0
 
 
-From c0757c47c53107c0bb369efaf030ad5b994022c5 Mon Sep 17 00:00:00 2001
+From b48748829bbbe1bfa160e4650075962529c7be1d Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sat, 20 Apr 2019 15:05:28 +0200
 Subject: [PATCH 11/17] x32: libavutil
@@ -2560,7 +2576,7 @@ index 317fba6fca..52a5c4e25e 100644
 2.21.0
 
 
-From 39d792851e25491899a5306eeb772189edc4c70e Mon Sep 17 00:00:00 2001
+From 3b8d26207ce3c09ffbde8f5219092d730975f902 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sat, 20 Apr 2019 15:05:40 +0200
 Subject: [PATCH 12/17] x32: libswscale
@@ -2807,7 +2823,7 @@ index f9781703a9..099ba11fa1 100644
 2.21.0
 
 
-From 7de3c539421d9329f270756b1887d43ea53e8419 Mon Sep 17 00:00:00 2001
+From 0935f5dd0f43c59cc283e6491e96a1aadb6bdb2f Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sat, 20 Apr 2019 15:05:53 +0200
 Subject: [PATCH 13/17] x32: libswresample
@@ -3124,7 +3140,7 @@ index 7107cf9d42..3fbdb1abc6 100644
 2.21.0
 
 
-From 977f199437b37d75299fddc147d903567ec1320b Mon Sep 17 00:00:00 2001
+From c6c53936d5a63f79f8eaadd597365bd7bfa91f94 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sat, 20 Apr 2019 15:06:23 +0200
 Subject: [PATCH 14/17] x32: libavresample
@@ -3929,7 +3945,7 @@ index d677c7179a..b505a07c98 100644
 2.21.0
 
 
-From 58bd57f1c465d9fd5d1365aa7ba8b0ce908e46a8 Mon Sep 17 00:00:00 2001
+From e3cad2c85618e9102f6a258963b312fb28ee9ff2 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sat, 20 Apr 2019 15:06:38 +0200
 Subject: [PATCH 15/17] x32: libavfilter
@@ -5386,7 +5402,7 @@ index 79d127dfaa..0d4fe9493d 100644
 2.21.0
 
 
-From 6d855c9ade84948c51690560ca2d04ba27c9ae05 Mon Sep 17 00:00:00 2001
+From 25876e5c9a79d88ead794548c0648166339ba7ad Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sat, 20 Apr 2019 15:06:53 +0200
 Subject: [PATCH 16/17] x32: libavcodec
@@ -12174,7 +12190,7 @@ index 0220885da6..6039f32e53 100644
 2.21.0
 
 
-From d1075e71f467d6328b326f9d70e98a607ffc48b4 Mon Sep 17 00:00:00 2001
+From 47b0751a5676ec3e20167c49c5ac0d5b9756e899 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
 Date: Sat, 20 Apr 2019 16:44:31 +0200
 Subject: [PATCH 17/17] x32: 3.4.6 backport extras
@@ -12184,33 +12200,11 @@ Content-Transfer-Encoding: 8bit
 
 Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
 ---
- configure                        | 3 +--
  libavcodec/x86/huffyuvdsp.asm    | 4 ++--
  libavcodec/x86/huffyuvencdsp.asm | 3 +--
  libavcodec/x86/vp8dsp.asm        | 4 ++--
- 4 files changed, 6 insertions(+), 8 deletions(-)
+ 3 files changed, 5 insertions(+), 6 deletions(-)
 
-diff --git a/configure b/configure
-index f126f87f99..c28b2bbaf4 100755
---- a/configure
-+++ b/configure
-@@ -3362,6 +3362,7 @@ pkg_config_default=pkg-config
- ranlib_default="ranlib"
- strip_default="strip"
- version_script='--version-script'
-+objformat="elf32"
- x86asmexe_default="nasm"
- windres_default="windres"
- nvcc_default="nvcc"
-@@ -4899,8 +4900,6 @@ esac
- enable $subarch
- enabled spic && enable_weak pic
- 
--enabled x86_64 && objformat=elf64 || objformat="elf32"
--
- # OS specific
- case $target_os in
-     aix)
 diff --git a/libavcodec/x86/huffyuvdsp.asm b/libavcodec/x86/huffyuvdsp.asm
 index be7cef595e..9bcee9d3ea 100644
 --- a/libavcodec/x86/huffyuvdsp.asm
