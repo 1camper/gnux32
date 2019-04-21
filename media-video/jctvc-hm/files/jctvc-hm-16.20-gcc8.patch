@@ -1,0 +1,21 @@
+--- a/source/Lib/TLibCommon/ContextModel.h
++++ b/source/Lib/TLibCommon/ContextModel.h
+@@ -58,7 +58,6 @@
+ {
+ public:
+   ContextModel  ()                        { m_ucState = 0; m_binsCoded = 0; }
+-  ~ContextModel ()                        {}
+ 
+   UChar getState  ()                { return ( m_ucState >> 1 ); }                    ///< get current state
+   UChar getMps    ()                { return ( m_ucState  & 1 ); }                    ///< get curret MPS
+--- a/source/Lib/TLibCommon/TComPrediction.cpp
++++ b/source/Lib/TLibCommon/TComPrediction.cpp
+@@ -732,7 +732,7 @@
+ {
+   assert(width <= height);
+ 
+-  Int leftColumn[MAX_CU_SIZE+1], topRow[MAX_CU_SIZE+1], bottomRow[MAX_CU_SIZE], rightColumn[MAX_CU_SIZE];
++  Int leftColumn[MAX_CU_SIZE+1]={}, topRow[MAX_CU_SIZE+1], bottomRow[MAX_CU_SIZE], rightColumn[MAX_CU_SIZE];
+   UInt shift1Dhor = g_aucConvertToBit[ width ] + 2;
+   UInt shift1Dver = g_aucConvertToBit[ height ] + 2;
+ 
