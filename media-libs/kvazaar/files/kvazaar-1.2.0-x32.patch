@@ -1,0 +1,820 @@
+From 64d92ba60b501bb50e699c8c56de3ebfe1f480a0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 21 Apr 2019 13:31:22 +0200
+Subject: [PATCH 1/5] configure.ac : add x32 support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+---
+ configure.ac | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/configure.ac b/configure.ac
+index 9c09f500..c9f06639 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -122,6 +122,11 @@ AS_CASE([$host_os],
+                ]
+          )
+         ],
++        [linux*x32], [
++         ASFLAGS="$ASFLAGS -m x32 -f elfx32"
++         LDFLAGS="$LDFLAGS -Wl,-z,noexecstack"
++         LIBS="$LIBS -lrt"
++        ],
+         [linux*|*kfreebsd*], [
+          ASFLAGS="$ASFLAGS -f elf$BITS"
+          LDFLAGS="$LDFLAGS -Wl,-z,noexecstack"
+-- 
+2.21.0
+
+
+From 9a43ad2429f510d81e4fcfe92dc09fc136ca32f8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 21 Apr 2019 13:32:59 +0200
+Subject: [PATCH 2/5] src/extras/x86inc.asm : pull from ffmpeg-x32 patch; also
+ fix executable stack
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+---
+ src/extras/x86inc.asm | 349 ++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 298 insertions(+), 51 deletions(-)
+
+diff --git a/src/extras/x86inc.asm b/src/extras/x86inc.asm
+index b105e576..5a140a35 100644
+--- a/src/extras/x86inc.asm
++++ b/src/extras/x86inc.asm
+@@ -56,6 +56,19 @@
+     %endif
+ %endif
+ 
++%define FORMAT_ELF 0
++%define ABI_X32 0
++%ifidn __OUTPUT_FORMAT__,elf
++    %define FORMAT_ELF 1
++%elifidn __OUTPUT_FORMAT__,elf32
++    %define FORMAT_ELF 1
++%elifidn __OUTPUT_FORMAT__,elfx32
++    %define FORMAT_ELF 1
++    %define ABI_X32 1
++%elifidn __OUTPUT_FORMAT__,elf64
++    %define FORMAT_ELF 1
++%endif
++
+ %ifdef PREFIX
+     %define mangle(x) _ %+ x
+ %else
+@@ -112,9 +125,44 @@ CPUNOP amdnop
+ ; cglobal foo, 2,3,0, dst, src, tmp
+ ; declares a function (foo), taking two args (dst and src) and one local variable (tmp)
+ 
+-; TODO Some functions can use some args directly from the stack. If they're the
+-; last args then you can just not declare them, but if they're in the middle
+-; we need more flexible macro.
++; The names in the list to can optionally be preceded by type-specifiers, which
++; are strings of up to 3 characters: type [extend] [delay].
++; type declares the size of the the argument:
++; 'b' byte size (int8_t)
++; 'w' word size (int16_t)
++; 'd' dword size (int32_t)
++; 'q' qword size (int64_t)
++; 'p' pointer size (T*, size_t, ptrdiff_t, intptr_t, uintptr_t)
++; extend specifies how the register is to be loaded from the passed argument
++; by PROLOGUE or LOAD_ARG:
++; if omitted:
++;     The argument is loaded using mov of appropriate size if passed on the stack.
++;     No action is taken if the argument is already present in a register.
++;     That means that while smaller types are passed as if being promoted to int
++;     first, that while the lower 32 bits of a 64 register/stack argument are
++;     determined by the value of the argument, the same is not true for the upper
++;     32 bits unless the argument had 64 bit size originally, except that with the
++;     x32 ABI, pointers that were passed by register, will have the upper half
++;     of the register cleared, so that 64-bit adressing mode can be used.
++; '+' the argument is zero extended to register size if smaller
++; '-' the argument is sign extended to register size if smaller
++; delay
++; '*' the register will not be loaded by PROLOGUE
++;
++; cheat sheet: typical specifiers for certain types:
++; "b+" uint8_t
++; "b-" int8_t
++; "w+" uint16_t
++; "w-" int16_t
++; "d+" uint32_t
++; "d-" int32_t
++; "q+" uint64_t
++; "q-" int64_t
++; "p+" size_t, uintptr_t
++; "p-" ptrdiff_t, intptr_t
++; +/- should be omitted if the the 64-bit register is never used or if the argument
++;     is extended later
++; pointers always use just "p"
+ 
+ ; RET:
+ ; Pops anything that was pushed by PROLOGUE, and returns.
+@@ -124,26 +172,47 @@ CPUNOP amdnop
+ 
+ ; registers:
+ ; rN and rNq are the native-size register holding function argument N
+-; rNd, rNw, rNb are dword, word, and byte size
++; rNp, rNd, rNw, rNb are pointer, dword, word, and byte size
+ ; rNh is the high 8 bits of the word size
+ ; rNm is the original location of arg N (a register or on the stack), dword
+-; rNmp is native size
++; rNmp, rNmq are pointer and native size
++
++%macro DECLARE_MEM_REG 1-2
++    %if %0 == 2
++        %assign r%1_mem_reg_off %2
++    %else
++        %assign r%1_mem_reg_off r %+ declare_mem_reg_last %+ _mem_reg_off + gprsize
++    %endif
++    %define r%1m [rstk + stack_offset + r %+ %1 %+ _mem_reg_off]
++    %define r%1md dword r %+ %1 %+ m
++    %define r%1mp pword r %+ %1 %+ m
++    %if ARCH_X86_64
++        %define r%1mq qword r %+ %1 %+ m
++    %else
++        %define r%1mq dword r %+ %1 %+ m
++    %endif
++    %assign declare_mem_reg_last %1
++%endmacro
+ 
+ %macro DECLARE_REG 2-3
+     %define r%1q %2
++    %define r%1p %2p
+     %define r%1d %2d
+     %define r%1w %2w
+     %define r%1b %2b
+     %define r%1h %2h
++    %if ABI_X32
++        %define %2p %2d
++    %else
++        %define %2p %2
++    %endif
+     %if %0 == 2
+         %define r%1m  %2d
+-        %define r%1mp %2
+-    %elif ARCH_X86_64 ; memory
+-        %define r%1m [rstk + stack_offset + %3]
+-        %define r%1mp qword r %+ %1 %+ m
++        %define r%1md %2d
++        %define r%1mp %2p
++        %define r%1mq %2
+     %else
+-        %define r%1m [rstk + stack_offset + %3]
+-        %define r%1mp dword r %+ %1 %+ m
++        DECLARE_MEM_REG %1, %3
+     %endif
+     %define r%1  %2
+ %endmacro
+@@ -159,6 +228,13 @@ CPUNOP amdnop
+     %define e%1h %3
+     %define r%1b %2
+     %define e%1b %2
++    %if ABI_X32
++        %define r%1p e%1
++        %define e%1p e%1
++    %else
++        %define r%1p r%1
++        %define e%1p r%1
++    %endif
+ %if ARCH_X86_64 == 0
+     %define r%1  e%1
+ %endif
+@@ -171,6 +247,7 @@ DECLARE_REG_SIZE dx, dl, dh
+ DECLARE_REG_SIZE si, sil, null
+ DECLARE_REG_SIZE di, dil, null
+ DECLARE_REG_SIZE bp, bpl, null
++DECLARE_REG_SIZE sp, spl, null
+ 
+ ; t# defines for when per-arch register allocation is more complex than just function arguments
+ 
+@@ -186,6 +263,7 @@ DECLARE_REG_SIZE bp, bpl, null
+ %macro DECLARE_REG_TMP_SIZE 0-*
+     %rep %0
+         %define t%1q t%1 %+ q
++        %define t%1p t%1 %+ p
+         %define t%1d t%1 %+ d
+         %define t%1w t%1 %+ w
+         %define t%1h t%1 %+ h
+@@ -202,6 +280,18 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     %define gprsize 4
+ %endif
+ 
++%if ARCH_X86_64 && ABI_X32 == 0
++    %define ptrsize 8
++    %define pword qword
++    %define resp resq
++    %define dp dq
++%else
++    %define ptrsize 4
++    %define pword dword
++    %define resp resd
++    %define dp dd
++%endif
++
+ %macro PUSH 1
+     push %1
+     %ifidn rstk, rsp
+@@ -237,7 +327,25 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+ %macro LOAD_IF_USED 1-*
+     %rep %0
+         %if %1 < num_args
+-            mov r%1, r %+ %1 %+ mp
++            %if argload_delayed_%1 == 0
++                argload_%1
++            %endif
++        %endif
++        %rotate 1
++    %endrep
++%endmacro
++
++%macro LOAD_ARG 1-*
++    %rep %0
++        %ifnum %1
++            %assign %%i %1
++        %else
++            %assign %%i %1 %+ _reg_num
++        %endif
++        %if %%i < regs_used
++            argload_ %+ %%i
++        %else
++            %error "argument not in regs used <regs_used>"
+         %endif
+         %rotate 1
+     %endrep
+@@ -247,6 +355,8 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     sub %1, %2
+     %ifidn %1, rstk
+         %assign stack_offset stack_offset+(%2)
++    %elifidn %1, rstkp
++        %assign stack_offset stack_offset+(%2)
+     %endif
+ %endmacro
+ 
+@@ -254,6 +364,8 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     add %1, %2
+     %ifidn %1, rstk
+         %assign stack_offset stack_offset-(%2)
++    %elifidn %1, rstkp
++        %assign stack_offset stack_offset-(%2)
+     %endif
+ %endmacro
+ 
+@@ -275,17 +387,37 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     %endif
+ %endmacro
+ 
++%macro RESTORE_DEFAULT_ARGS 1
++    %assign %%i 0
++    %rep %1
++        CAT_XDEFINE argload_insn, %%i, movifnidn
++        CAT_XDEFINE argload_dst, %%i, r %+ %%i %+ q
++        CAT_XDEFINE argload_src, %%i, r %+ %%i %+ mq
++        CAT_XDEFINE argload_, %%i, movifnidn r %+ %%i %+ q, r %+ %%i %+ mq
++        CAT_XDEFINE argload_delayed_, %%i, 0
++        CAT_XDEFINE argsuffix_, %%i, q
++        %assign %%i %%i + 1
++    %endrep
++%endmacro
++
++; arg$ is the argument with the size as declared
+ %macro DEFINE_ARGS 0-*
+     %ifdef n_arg_names
+         %assign %%i 0
+         %rep n_arg_names
+             CAT_UNDEF arg_name %+ %%i, q
++            CAT_UNDEF arg_name %+ %%i, p
+             CAT_UNDEF arg_name %+ %%i, d
+             CAT_UNDEF arg_name %+ %%i, w
+             CAT_UNDEF arg_name %+ %%i, h
+             CAT_UNDEF arg_name %+ %%i, b
+             CAT_UNDEF arg_name %+ %%i, m
++            CAT_UNDEF arg_name %+ %%i, md
+             CAT_UNDEF arg_name %+ %%i, mp
++            CAT_UNDEF arg_name %+ %%i, mq
++            CAT_UNDEF arg_name %+ %%i, $
++            CAT_UNDEF arg_name %+ %%i, _reg_num
++            CAT_UNDEF arg_name %+ %%i, _src_num
+             CAT_UNDEF arg_name, %%i
+             %assign %%i %%i+1
+         %endrep
+@@ -294,22 +426,135 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+     %xdefine %%stack_offset stack_offset
+     %undef stack_offset ; so that the current value of stack_offset doesn't get baked in by xdefine
+     %assign %%i 0
++    %assign %%argsize gprsize
++    %define %%loadinsn movifnidn
++    %define %%loaddst q
++    %define %%loadsrc mq
++    %define %%suffix q
++    %assign %%delayload 0
+     %rep %0
+-        %xdefine %1q r %+ %%i %+ q
+-        %xdefine %1d r %+ %%i %+ d
+-        %xdefine %1w r %+ %%i %+ w
+-        %xdefine %1h r %+ %%i %+ h
+-        %xdefine %1b r %+ %%i %+ b
+-        %xdefine %1m r %+ %%i %+ m
+-        %xdefine %1mp r %+ %%i %+ mp
+-        CAT_XDEFINE arg_name, %%i, %1
+-        %assign %%i %%i+1
++        CAT_XDEFINE argload_insn, %%i, %%loadinsn
++        CAT_XDEFINE argload_dst, %%i, %%loaddst
++        CAT_XDEFINE argload_src, %%i, %%loadsrc
++        CAT_XDEFINE argload_, %%i, %%loadinsn r %+ %%i %+ %%loaddst , r %+ %%i %+ %%loadsrc
++        CAT_XDEFINE argload_delayed_, %%i, %%delayload
++        CAT_XDEFINE argsuffix_, %%i, %%suffix
++        %ifstr %1
++            %strlen %%count %1
++            ASSERT %%count <= 3
++            %substr %%size %1 1
++            %assign %%argsize 4
++            %if (%%size == 'b' )
++                %define %%suffix b
++            %elif (%%size == 'w' )
++                %define %%suffix w
++            %elif (%%size == 'd' )
++                %define %%suffix d
++            %elif (%%size == 'p' )
++                %define %%suffix p
++                %assign %%argsize ptrsize
++            %elif (%%size == 'q' )
++                %define %%suffix q
++                %assign %%argsize gprsize
++            %else
++                %error "unknown argument type!"
++            %endif
++            %assign %%delayload 0
++            %substr %%sign %1 2
++            %define %%loadinsn movifnidn
++            %define %%loaddst q
++            %define %%loadsrc mq
++            %if %%argsize != gprsize
++                %define %%loaddst d
++                %define %%loadsrc md
++            %endif
++            %if %%sign == '+'
++                %if %%argsize != gprsize
++                    %define %%loadinsn mov
++                %endif
++            %elif %%sign == '-'
++                %if %%argsize != gprsize
++                    %define %%loadinsn movsxd
++                    %define %%loaddst q
++                %endif
++            %elif %%sign == '*'
++                %assign %%delayload 1
++            %elif %%sign == ''
++            %else
++                %error "unknown sign extension!"
++            %endif
++            %if %%count == 3
++                %substr %%delay %1 3
++                ASSERT %%delay == '*'
++                %assign %%delayload 1
++            %endif
++        %else
++            %if %%i > declare_mem_reg_last
++                DECLARE_MEM_REG %%i
++            %endif
++            CAT_XDEFINE arg_name, %%i, %1
++            %xdefine %1q  r %+ %%i %+ q
++            %xdefine %1p  r %+ %%i %+ p
++            %xdefine %1d  r %+ %%i %+ d
++            %xdefine %1w  r %+ %%i %+ w
++            %xdefine %1h  r %+ %%i %+ h
++            %xdefine %1b  r %+ %%i %+ b
++            %xdefine %1m  r %+ %%i %+ m
++            %xdefine %1md r %+ %%i %+ md
++            %xdefine %1mp r %+ %%i %+ mp
++            %xdefine %1mq r %+ %%i %+ mq
++            %xdefine %1$  r %+ %%i %+ %%suffix
++            %xdefine %1_reg_num %%i
++            %xdefine %1_src_num %%i
++
++            %assign %%i %%i+1
++            %assign %%argsize 4
++            %define %%loadinsn movifnidn
++            %define %%loaddst q
++            %define %%loadsrc mq
++        %endif
+         %rotate 1
+     %endrep
+     %xdefine stack_offset %%stack_offset
+     %assign n_arg_names %0
+ %endmacro
+ 
++; Assigns a named argument to a particular register, identified
++; by number or argument name
++%macro ASSIGN_ARG 2 ; arg_name, #reg_num|old_arg_name
++    %ifnum %2
++        %ifidn r%2q,%1 %+ q
++            %xdefine __err__ %1
++            %error "self assignment __err__"
++        %endif
++        %assign %%i %2
++    %else
++        %ifidn %2q,%1 %+ q
++            %xdefine __err__ %1
++            %error "self assignment: __err__"
++        %endif
++        %assign %%i %2 %+ _reg_num
++    %endif
++    %assign %%j %1 %+ _reg_num
++    %assign %%k %1 %+ _src_num
++    %xdefine %%suffix argsuffix_ %+ %%j
++    %xdefine %1q r %+ %%i %+ q
++    %xdefine %1p r %+ %%i %+ p
++    %xdefine %1d r %+ %%i %+ d
++    %xdefine %1w r %+ %%i %+ w
++    %xdefine %1h r %+ %%i %+ h
++    %xdefine %1b r %+ %%i %+ b
++    %xdefine %1$ r %+ %%i %+ %%suffix
++    %xdefine %1_reg_num %%i
++    %xdefine %%loadinsn argload_insn %+ %%j
++    %xdefine %%loaddst argload_dst %+ %%j
++    %xdefine %%loadsrc argload_src %+ %%k
++    CAT_XDEFINE argsuffix_, %%i, argsuffix_ %+ %%j
++    CAT_XDEFINE argload_insn, %%i, %%loadinsn
++    CAT_XDEFINE argload_dst, %%i, %%loaddst
++    CAT_XDEFINE argload_, %%i, %%loadinsn r %+ %%i %+ %%loaddst , r %+ %%k %+ %%loadsrc
++%endmacro
++
+ %macro ALLOC_STACK 1-2 0 ; stack_size, n_xmm_regs (for win64 only)
+     %ifnum %1
+         %if %1 != 0
+@@ -330,24 +575,25 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+             %endif
+             %if mmsize <= 16 && HAVE_ALIGNED_STACK
+                 %assign stack_size_padded stack_size_padded + %%stack_alignment - gprsize - (stack_offset & (%%stack_alignment - 1))
+-                SUB rsp, stack_size_padded
++                SUB rspp, stack_size_padded
+             %else
+                 %assign %%reg_num (regs_used - 1)
+                 %xdefine rstk r %+ %%reg_num
++                %xdefine rstkp r %+ %%reg_num %+ p
+                 ; align stack, and save original stack location directly above
+                 ; it, i.e. in [rsp+stack_size_padded], so we can restore the
+-                ; stack in a single instruction (i.e. mov rsp, rstk or mov
+-                ; rsp, [rsp+stack_size_padded])
+-                mov  rstk, rsp
++                ; stack in a single instruction (i.e. mov rspp, rstkp or mov
++                ; rspp, [rsp+stack_size_padded])
++                mov  rstkp, rspp
+                 %if %1 < 0 ; need to store rsp on stack
+-                    sub  rsp, gprsize+stack_size_padded
+-                    and  rsp, ~(%%stack_alignment-1)
++                    sub  rspp, gprsize+stack_size_padded
++                    and  rspp, ~(%%stack_alignment-1)
+                     %xdefine rstkm [rsp+stack_size_padded]
+-                    mov rstkm, rstk
++                    mov rstkm, rstkp
+                 %else ; can keep rsp in rstk during whole function
+-                    sub  rsp, stack_size_padded
+-                    and  rsp, ~(%%stack_alignment-1)
+-                    %xdefine rstkm rstk
++                    sub  rspp, stack_size_padded
++                    and  rspp, ~(%%stack_alignment-1)
++                    %xdefine rstkm rstkp
+                 %endif
+             %endif
+             WIN64_PUSH_XMM
+@@ -406,8 +652,9 @@ DECLARE_REG 14, R15, 120
+     %if mmsize != 8 && stack_size == 0
+         WIN64_SPILL_XMM %3
+     %endif
+-    LOAD_IF_USED 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
++    RESTORE_DEFAULT_ARGS regs_used
+     DEFINE_ARGS_INTERNAL %0, %4, %5
++    LOAD_IF_USED 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
+ %endmacro
+ 
+ %macro WIN64_PUSH_XMM 0
+@@ -505,8 +752,9 @@ DECLARE_REG 14, R15, 72
+     ASSERT regs_used <= 15
+     PUSH_IF_USED 9, 10, 11, 12, 13, 14
+     ALLOC_STACK %4
+-    LOAD_IF_USED 6, 7, 8, 9, 10, 11, 12, 13, 14
++    RESTORE_DEFAULT_ARGS regs_used
+     DEFINE_ARGS_INTERNAL %0, %4, %5
++    LOAD_IF_USED 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
+ %endmacro
+ 
+ %define has_epilogue regs_used > 9 || mmsize == 32 || stack_size > 0
+@@ -514,9 +762,9 @@ DECLARE_REG 14, R15, 72
+ %macro RET 0
+ %if stack_size_padded > 0
+ %if mmsize == 32 || HAVE_ALIGNED_STACK == 0
+-    mov rsp, rstkm
++    mov rspp, rstkm
+ %else
+-    add rsp, stack_size_padded
++    add rspp, stack_size_padded
+ %endif
+ %endif
+     POP_IF_USED 14, 13, 12, 11, 10, 9
+@@ -535,17 +783,14 @@ DECLARE_REG 3, ebx, 16
+ DECLARE_REG 4, esi, 20
+ DECLARE_REG 5, edi, 24
+ DECLARE_REG 6, ebp, 28
+-%define rsp esp
+-
+-%macro DECLARE_ARG 1-*
+-    %rep %0
+-        %define r%1m [rstk + stack_offset + 4*%1 + 4]
+-        %define r%1mp dword r%1m
+-        %rotate 1
+-    %endrep
+-%endmacro
+-
+-DECLARE_ARG 7, 8, 9, 10, 11, 12, 13, 14
++DECLARE_MEM_REG 7
++DECLARE_MEM_REG 8
++DECLARE_MEM_REG 9
++DECLARE_MEM_REG 10
++DECLARE_MEM_REG 11
++DECLARE_MEM_REG 12
++DECLARE_MEM_REG 13
++DECLARE_MEM_REG 14
+ 
+ %macro PROLOGUE 2-5+ ; #args, #regs, #xmm_regs, [stack_size,] arg_names...
+     %assign num_args %1
+@@ -561,8 +806,9 @@ DECLARE_ARG 7, 8, 9, 10, 11, 12, 13, 14
+     ASSERT regs_used <= 7
+     PUSH_IF_USED 3, 4, 5, 6
+     ALLOC_STACK %4
+-    LOAD_IF_USED 0, 1, 2, 3, 4, 5, 6
++    RESTORE_DEFAULT_ARGS regs_used
+     DEFINE_ARGS_INTERNAL %0, %4, %5
++    LOAD_IF_USED 0, 1, 2, 3, 4, 5, 6
+ %endmacro
+ 
+ %define has_epilogue regs_used > 3 || mmsize == 32 || stack_size > 0
+@@ -669,7 +915,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
+         CAT_XDEFINE cglobaled_, %2, 1
+     %endif
+     %xdefine current_function %2
+-    %ifidn __OUTPUT_FORMAT__,elf
++    %if FORMAT_ELF
+         global %2:function %%VISIBILITY
+     %else
+         global %2
+@@ -678,6 +924,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
+     %2:
+     RESET_MM_PERMUTATION        ; needed for x86-64, also makes disassembly somewhat nicer
+     %xdefine rstk rsp           ; copy of the original stack pointer, used when greater alignment than the known stack alignment is required
++    %xdefine rstkp rspp
+     %assign stack_offset 0      ; stack pointer offset relative to the return address
+     %assign stack_size 0        ; amount of stack space that can be freely used inside a function
+     %assign stack_size_padded 0 ; total amount of allocated stack space, including space for callee-saved xmm registers on WIN64 and alignment padding
+@@ -702,7 +949,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
+ 
+ %macro const 1-2+
+     %xdefine %1 mangle(private_prefix %+ _ %+ %1)
+-    %ifidn __OUTPUT_FORMAT__,elf
++    %if FORMAT_ELF
+         global %1:data hidden
+     %else
+         global %1
+@@ -712,7 +959,7 @@ BRANCH_INSTR jz, je, jnz, jne, jl, jle, jnl, jnle, jg, jge, jng, jnge, ja, jae,
+ 
+ ; This is needed for ELF, otherwise the GNU linker assumes the stack is
+ ; executable by default.
+-%ifidn __OUTPUT_FORMAT__,elf
++%if FORMAT_ELF
+ SECTION .note.GNU-stack noalloc noexec nowrite progbits
+ %endif
+ 
+@@ -789,7 +1036,7 @@ SECTION .note.GNU-stack noalloc noexec nowrite progbits
+ ; ym# is the corresponding ymm register if mmsize >= 32, otherwise the same as m#
+ ; (All 3 remain in sync through SWAP.)
+ 
+-%macro CAT_XDEFINE 3
++%macro CAT_XDEFINE 3+
+     %xdefine %1%2 %3
+ %endmacro
+ 
+-- 
+2.21.0
+
+
+From 0798792ea6a78bd56b22b05818882a90028298e9 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 21 Apr 2019 13:34:03 +0200
+Subject: [PATCH 3/5] src/strategies/x86_asm/*.asm: apply enhance cglobal
+ declaration, fix unpromoted function argument
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+---
+ src/strategies/x86_asm/picture-x86-asm-sad.asm  | 16 ++++++++--------
+ src/strategies/x86_asm/picture-x86-asm-satd.asm | 11 +++++------
+ 2 files changed, 13 insertions(+), 14 deletions(-)
+
+diff --git a/src/strategies/x86_asm/picture-x86-asm-sad.asm b/src/strategies/x86_asm/picture-x86-asm-sad.asm
+index beea5545..b6a122ad 100644
+--- a/src/strategies/x86_asm/picture-x86-asm-sad.asm
++++ b/src/strategies/x86_asm/picture-x86-asm-sad.asm
+@@ -40,7 +40,7 @@ INIT_XMM avx
+ ;r0 address of the first value(current frame)
+ ;r1 address of the first value(reference frame)
+ 
+-cglobal sad_4x4, 2, 2, 2
++cglobal sad_4x4, 2, 2, 2, "p", data1, "p", data2
+ 
+     ;Load 16 bytes of both frames
+     vmovdqu m0, [r0]
+@@ -66,7 +66,7 @@ cglobal sad_4x4, 2, 2, 2
+ ;r1 address of the first value(reference)
+ ;r2 stride
+ 
+-cglobal sad_4x4_stride, 3, 3, 2
++cglobal sad_4x4_stride, 3, 3, 2, "p", data1, "p", data2, "d-", stride
+ 
+     ;Load 4 times 4 bytes of both frames
+     vpinsrd m0, [r0], 0
+@@ -96,7 +96,7 @@ cglobal sad_4x4_stride, 3, 3, 2
+ ;r0 address of the first value(current)
+ ;r1 address of the first value(reference)
+ 
+-cglobal sad_8x8, 2, 2, 5
++cglobal sad_8x8, 2, 2, 5, "p", data1, "p", data2
+ 
+     ;Load the first half of both frames
+     vmovdqu m0, [r0]
+@@ -141,7 +141,7 @@ cglobal sad_8x8, 2, 2, 5
+ ;r1 address of the first value(reference)
+ ;r2 stride
+ 
+-cglobal sad_8x8_stride, 3, 3, 5
++cglobal sad_8x8_stride, 3, 3, 5, "p", data1, "p", data2, "d-", stride
+ 
+     ;Zero m0 register
+     vpxor m0, m0
+@@ -217,7 +217,7 @@ cglobal sad_8x8_stride, 3, 3, 5
+ ;r0 address of the first value(current)
+ ;r1 address of the first value(reference)
+ 
+-cglobal sad_16x16, 2, 2, 5
++cglobal sad_16x16, 2, 2, 5, "p", data1, "p", data2
+ 
+     ;Zero m4
+     vpxor m4, m4
+@@ -261,7 +261,7 @@ cglobal sad_16x16, 2, 2, 5
+ ;r1 address of the first value(reference)
+ ;r2 stride
+ 
+-cglobal sad_16x16_stride, 3, 3, 5
++cglobal sad_16x16_stride, 3, 3, 5, "p", data1, "p", data2, "d-", stride
+ 
+     vpxor m4, m4
+ 
+@@ -298,7 +298,7 @@ cglobal sad_16x16_stride, 3, 3, 5
+ ;r0 address of the first value(current)
+ ;r1 address of the first value(reference)
+ ;r2 stride
+-cglobal sad_32x32_stride, 3, 3, 5
++cglobal sad_32x32_stride, 3, 3, 5, "p", data1, "p", data2
+     vpxor m4, m4
+ 
+ 	; Handle 2 lines per iteration
+@@ -334,7 +334,7 @@ cglobal sad_32x32_stride, 3, 3, 5
+ ;r0 address of the first value(current)
+ ;r1 address of the first value(reference)
+ ;r2 stride
+-cglobal sad_64x64_stride, 3, 4, 5
++cglobal sad_64x64_stride, 3, 4, 5, "p", data1, "p", data2, "d-", stride
+     vpxor m4, m4 ; sum accumulation register
+ 	mov r3, 4 ; number of iterations in the loop
+ 
+diff --git a/src/strategies/x86_asm/picture-x86-asm-satd.asm b/src/strategies/x86_asm/picture-x86-asm-satd.asm
+index 6774b1fb..5ea2b565 100644
+--- a/src/strategies/x86_asm/picture-x86-asm-satd.asm
++++ b/src/strategies/x86_asm/picture-x86-asm-satd.asm
+@@ -418,7 +418,7 @@ INIT_XMM avx
+ ;r0 address of the first value(current)
+ ;r1 address of the first value(reference)
+ 
+-cglobal satd_4x4, 2, 2, 6
++cglobal satd_4x4, 2, 2, 6, "p", org, "p", cur
+ 
+     ;Load 8 bytes from memory and zero extend
+     ;to 16-bit values. Calculate difference.
+@@ -475,12 +475,11 @@ cglobal satd_4x4, 2, 2, 6
+ ;Calculates SATD of a 8x8 block inside a frame with stride
+ ;r0 address of the first value(reference)
+ ;r1 address of the first value(current)
+-;r2 stride
+ 
+ %if ARCH_X86_64
+-    cglobal satd_8x8, 4, 5, 16
++    cglobal satd_8x8, 2, 5, 16, "p", org, "p", cur
+ %else
+-    cglobal satd_8x8, 4, 5, 8
++    cglobal satd_8x8, 2, 5, 8, "p", org, "p", cur
+ %endif
+     
+     ;Set arguments
+@@ -502,9 +501,9 @@ cglobal satd_4x4, 2, 2, 6
+ %macro KVZ_SATD_NXN 1
+ 
+     %if ARCH_X86_64
+-        cglobal satd_%1x%1, 2, 7, 16
++        cglobal satd_%1x%1, 2, 7, 16, "p", org, "p", cur
+     %else
+-        cglobal satd_%1x%1, 2, 7, 8
++        cglobal satd_%1x%1, 2, 7, 8, "p", org, "p", cur
+     %endif
+     
+     ;Set arguments
+-- 
+2.21.0
+
+
+From 52eb15578135ebad528433ad03490539d37209de Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 21 Apr 2019 13:35:55 +0200
+Subject: [PATCH 4/5] tests/test_external_symbols.sh : filther thunks in x86
+ pic builds
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+---
+ tests/test_external_symbols.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/test_external_symbols.sh b/tests/test_external_symbols.sh
+index b9b3d595..d84e9c15 100755
+--- a/tests/test_external_symbols.sh
++++ b/tests/test_external_symbols.sh
+@@ -4,7 +4,7 @@
+ 
+ set -eu${BASH+o pipefail}
+ 
+-if nm -go --defined-only ../src/.libs/libkvazaar.a | grep -v ' kvz_'; then
++if nm -go --defined-only ../src/.libs/libkvazaar.a | grep -v ' kvz_' | grep -v ' __x86.get_pc_thunk.'; then
+     printf '%s\n' 'Only symbols prefixed with "kvz_" should be exported from libkvazaar.'
+     false
+ fi
+-- 
+2.21.0
+
+
+From ba015a31288bd4f82a80d6cf9f1449d2407f8082 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Sun, 21 Apr 2019 14:29:50 +0200
+Subject: [PATCH 5/5] tests/util.sh : fix tests for x32 or if valgrind isn't
+ present
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+---
+ tests/util.sh | 19 +++++++++++++++----
+ 1 file changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/tests/util.sh b/tests/util.sh
+index 89a1e0fc..353751c4 100644
+--- a/tests/util.sh
++++ b/tests/util.sh
+@@ -34,10 +34,21 @@ valgrind_test() {
+ 
+     prepare "${dimensions}" "${frames}"
+ 
+-    print_and_run \
+-        libtool execute \
+-            valgrind --leak-check=full --error-exitcode=1 -- \
+-            ../src/kvazaar -i "${yuvfile}" "--input-res=${dimensions}" -o "${hevcfile}" "$@"
++# use valgrind only if present
++# valgrind doesn't support x32 yet
++    if ! valgrind --version &> /dev/null ||
++        readelf -h /usr/bin/valgrind | grep ELF32 &> /dev/null && readelf -h /usr/bin/valgrind | grep X86-64 &> /dev/null ||
++        readelf -h ../src/.libs/kvazaar | grep ELF32 &> /dev/null && readelf -h ../src/.libs/kvazaar | grep X86-64 &> /dev/null
++    then
++        print_and_run \
++            libtool execute \
++                ../src/kvazaar -i "${yuvfile}" "--input-res=${dimensions}" -o "${hevcfile}" "$@"
++    else
++        print_and_run \
++            libtool execute \
++                valgrind --leak-check=full --error-exitcode=1 -- \
++                ../src/kvazaar -i "${yuvfile}" "--input-res=${dimensions}" -o "${hevcfile}" "$@"
++    fi
+ 
+     print_and_run \
+         TAppDecoderStatic -b "${hevcfile}"
+-- 
+2.21.0
+
