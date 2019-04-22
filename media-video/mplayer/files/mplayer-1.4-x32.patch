@@ -1,0 +1,258 @@
+--- a/configure
++++ b/configure
+@@ -1882,11 +1882,12 @@
+     return 0;
+ }
+ EOF
++x32=no
+ if x86 ; then
+   cc_check && host_arch=x86_64 || host_arch=i386
+-  # Treat x32 as generic architecture without any optimizations.
+-  if test "$host_arch" = 'i386' && cpp_condition_check '' 'defined(__x86_64__)'; then
+-      host_arch=generic
++  if cpp_condition_check '' 'defined(__x86_64__) && defined(__ILP32__)'; then
++      host_arch=x86_64
++      x32=yes
+   fi
+ fi
+ if ppc ; then
+@@ -3066,6 +3067,10 @@
+     objformat="aout"
+   else
+     objformat="elf"
++    x86_64 && objformat="elf64"
++    if x32=yes; then
++      objformat="elfx32"
++    fi
+   fi
+   yasmdefines=""
+   # currently tested for Linux x86, x86_64
+--- a/libmpcodecs/vf_filmdint.c
++++ b/libmpcodecs/vf_filmdint.c
+@@ -440,7 +440,7 @@
+             "paddusw %%mm2, %%mm7\n\t"                                             \
+             "paddusw %%mm1, %%mm7\n\t"                                             \
+             : "=r" (a), "=r" (b)                                             \
+-            : "r"((x86_reg)as), "r"((x86_reg)bs), "m" (ones), "0"(a), "1"(b), "X"(*a), "X"(*b) \
++            : "r"((intptr_t)as), "r"((intptr_t)bs), "m" (ones), "0"(a), "1"(b), "X"(*a), "X"(*b) \
+             );                                                                     \
+     } while (--lines);
+ 
+@@ -489,7 +489,7 @@
+ #endif
+     __asm__ volatile("prefetcht0 (%0,%2)\n\t"
+                  "prefetcht0 (%1,%3)\n\t" :
+-                 : "r" (a), "r" (b),
++                 : "r" ((x86_reg)(uintptr_t)a), "r" ((x86_reg)(uintptr_t)b),
+                  "r" (prefetch_line * as), "r" (prefetch_line * bs));
+ 
+     BLOCK_METRICS_TEMPLATE();
+@@ -649,7 +649,7 @@
+             "por %%mm3, %%mm1 \n\t"     /* avg if >= threshold */
+             "movq %%mm1, (%2,%4) \n\t"
+             : /* no output */
+-            : "r" (a), "r" ((x86_reg)bos), "r" ((x86_reg)dst), "r" ((x86_reg)ss), "r" ((x86_reg)ds), "r" ((x86_reg)cos)
++            : "r" ((x86_reg)(uintptr_t)a), "r" ((x86_reg)bos), "r" ((x86_reg)(uintptr_t)dst), "r" ((x86_reg)ss), "r" ((x86_reg)ds), "r" ((x86_reg)cos)
+             );
+         a += 8;
+         dst += 8;
+--- a/libmpcodecs/vf_ilpack.c
++++ b/libmpcodecs/vf_ilpack.c
+@@ -130,11 +130,11 @@
+         "movq (%%"REG_S"), %%mm2 \n\t"
+ 
+         "movq (%%"REG_a",%%"REG_d",2), %%mm4 \n\t"
+-        "movq (%%"REG_b",%%"REG_BP",2), %%mm6 \n\t"
++        "movq (%3,%%"REG_BP",2), %%mm6 \n\t"
+         "punpcklbw %%mm0, %%mm4 \n\t"
+         "punpcklbw %%mm0, %%mm6 \n\t"
+         "movq (%%"REG_a"), %%mm3 \n\t"
+-        "movq (%%"REG_b"), %%mm5 \n\t"
++        "movq (%3), %%mm5 \n\t"
+         "punpcklbw %%mm0, %%mm3 \n\t"
+         "punpcklbw %%mm0, %%mm5 \n\t"
+         "paddw %%mm3, %%mm4 \n\t"
+@@ -166,11 +166,11 @@
+         "movq 8(%%"REG_S"), %%mm2 \n\t"
+ 
+         "movq (%%"REG_a",%%"REG_d",2), %%mm4 \n\t"
+-        "movq (%%"REG_b",%%"REG_BP",2), %%mm6 \n\t"
++        "movq (%3,%%"REG_BP",2), %%mm6 \n\t"
+         "punpckhbw %%mm0, %%mm4 \n\t"
+         "punpckhbw %%mm0, %%mm6 \n\t"
+         "movq (%%"REG_a"), %%mm3 \n\t"
+-        "movq (%%"REG_b"), %%mm5 \n\t"
++        "movq (%3), %%mm5 \n\t"
+         "punpckhbw %%mm0, %%mm3 \n\t"
+         "punpckhbw %%mm0, %%mm5 \n\t"
+         "paddw %%mm3, %%mm4 \n\t"
+@@ -197,7 +197,7 @@
+ 
+         "add $16, %%"REG_S" \n\t"
+         "add $8, %%"REG_a" \n\t"
+-        "add $8, %%"REG_b" \n\t"
++        "add $8, %3 \n\t"
+ 
+         "movq %%mm1, 16(%%"REG_D") \n\t"
+         "movq %%mm2, 24(%%"REG_D") \n\t"
+@@ -208,7 +208,7 @@
+         "emms \n\t"
+         "pop %%"REG_BP" \n\t"
+         :
+-        : "S" (y), "D" (dst), "a" (u), "b" (v), "c" (w/16),
++        : "S" (y), "D" (dst), "a" (u), "b" ((x86_reg)(uintptr_t)v), "c" (w/16),
+ #if ARCH_X86_64
+         "d" ((x86_reg)us), "r" ((x86_reg)vs)
+ #else
+@@ -238,11 +238,11 @@
+         "movq (%%"REG_S"), %%mm2 \n\t"
+ 
+         "movq (%%"REG_a",%%"REG_d",2), %%mm4 \n\t"
+-        "movq (%%"REG_b",%%"REG_BP",2), %%mm6 \n\t"
++        "movq (%3,%%"REG_BP",2), %%mm6 \n\t"
+         "punpcklbw %%mm0, %%mm4 \n\t"
+         "punpcklbw %%mm0, %%mm6 \n\t"
+         "movq (%%"REG_a"), %%mm3 \n\t"
+-        "movq (%%"REG_b"), %%mm5 \n\t"
++        "movq (%3), %%mm5 \n\t"
+         "punpcklbw %%mm0, %%mm3 \n\t"
+         "punpcklbw %%mm0, %%mm5 \n\t"
+         "movq %%mm4, %%mm7 \n\t"
+@@ -276,11 +276,11 @@
+         "movq 8(%%"REG_S"), %%mm2 \n\t"
+ 
+         "movq (%%"REG_a",%%"REG_d",2), %%mm4 \n\t"
+-        "movq (%%"REG_b",%%"REG_BP",2), %%mm6 \n\t"
++        "movq (%3,%%"REG_BP",2), %%mm6 \n\t"
+         "punpckhbw %%mm0, %%mm4 \n\t"
+         "punpckhbw %%mm0, %%mm6 \n\t"
+         "movq (%%"REG_a"), %%mm3 \n\t"
+-        "movq (%%"REG_b"), %%mm5 \n\t"
++        "movq (%3), %%mm5 \n\t"
+         "punpckhbw %%mm0, %%mm3 \n\t"
+         "punpckhbw %%mm0, %%mm5 \n\t"
+         "movq %%mm4, %%mm7 \n\t"
+@@ -309,7 +309,7 @@
+ 
+         "add $16, %%"REG_S" \n\t"
+         "add $8, %%"REG_a" \n\t"
+-        "add $8, %%"REG_b" \n\t"
++        "add $8, %3 \n\t"
+ 
+         "movq %%mm1, 16(%%"REG_D") \n\t"
+         "movq %%mm2, 24(%%"REG_D") \n\t"
+@@ -320,7 +320,7 @@
+         "emms \n\t"
+         "pop %%"REG_BP" \n\t"
+         :
+-        : "S" (y), "D" (dst), "a" (u), "b" (v), "c" (w/16),
++        : "S" (y), "D" (dst), "a" (u), "b" ((x86_reg)(uintptr_t)v), "c" (w/16),
+ #if ARCH_X86_64
+         "d" ((x86_reg)us), "r" ((x86_reg)vs)
+ #else
+--- a/libmpcodecs/vf_noise.c
++++ b/libmpcodecs/vf_noise.c
+@@ -149,7 +149,7 @@
+ 
+ #if HAVE_MMX_INLINE
+ static inline void lineNoise_MMX(uint8_t *dst, uint8_t *src, int8_t *noise, int len, int shift){
+-        x86_reg mmx_len= len&(~7);
++        intptr_t mmx_len= len&(~7);
+         noise+=shift;
+ 
+         __asm__ volatile(
+@@ -178,7 +178,7 @@
+ //duplicate of previous except movntq
+ #if HAVE_MMXEXT_INLINE
+ static inline void lineNoise_MMX2(uint8_t *dst, uint8_t *src, int8_t *noise, int len, int shift){
+-        x86_reg mmx_len= len&(~7);
++        intptr_t mmx_len= len&(~7);
+         noise+=shift;
+ 
+         __asm__ volatile(
+@@ -220,7 +220,7 @@
+ 
+ #if HAVE_MMX_INLINE
+ static inline void lineNoiseAvg_MMX(uint8_t *dst, uint8_t *src, int len, int8_t **shift){
+-        x86_reg mmx_len= len&(~7);
++        intptr_t mmx_len= len&(~7);
+ 
+         __asm__ volatile(
+                 "mov %5, %%"REG_a"                \n\t"
+--- a/libmpcodecs/vf_yadif.c
++++ b/libmpcodecs/vf_yadif.c
+@@ -255,8 +255,8 @@
+             :[prev] "r"(prev),\
+              [cur]  "r"(cur),\
+              [next] "r"(next),\
+-             [prefs]"r"((x86_reg)refs),\
+-             [mrefs]"r"((x86_reg)-refs),\
++             [prefs]"r"((intptr_t)refs),\
++             [mrefs]"r"((intptr_t)-refs),\
+              [pw1]  "m"(pw_1),\
+              [pb1]  "m"(pb_1),\
+              [mode] "g"(mode)\
+--- a/libvo/aclib_template.c
++++ b/libvo/aclib_template.c
+@@ -329,7 +329,7 @@
+ 			"cmp %4, %2		\n\t"
+ 			" jae 1b		\n\t"
+ 				: "+r" (from), "+r" (to), "+r" (i)
+-				: "r" ((x86_reg)BLOCK_SIZE), "i" (BLOCK_SIZE/64), "i" ((x86_reg)CONFUSION_FACTOR)
++				: "r" ((intptr_t)BLOCK_SIZE), "i" (BLOCK_SIZE/64), "i" ((intptr_t)CONFUSION_FACTOR)
+ 				: "%"REG_a, "%ecx"
+ 		);
+ 
+--- a/mpx86asm.h
++++ b/mpx86asm.h
+@@ -35,8 +35,40 @@
+ typedef struct xmm_reg { uint64_t a, b; } xmm_reg;
+ typedef struct ymm_reg { uint64_t a, b, c, d; } ymm_reg;
+ 
+-#if ARCH_X86_64
++#if ARCH_X86_64 && defined __ILP32__
++#    define ABI_X32 1
++#else
++#    define ABI_X32 0
++#endif
++
++#if ABI_X32
++#    define OPSIZE "q"
++#    define PTROP "k"
++#    define MAXOP "q"
++#    define REG_a "eax"
++#    define REG_b "ebx"
++#    define REG_c "ecx"
++#    define REG_d "edx"
++#    define REG_D "edi"
++#    define REG_S "esi"
++#    define PTR_SIZE "4"
++typedef int64_t x86_reg;
++
++/* REG_SP is defined in Solaris sys headers, so use REG_sp */
++#    define REG_sp "rsp"
++#    define REG_BP "rbp"
++#    define REGBP   ebp
++#    define REGa    eax
++#    define REGb    ebx
++#    define REGc    ecx
++#    define REGd    edx
++#    define REGSP   rsp
++
++#elif ARCH_X86_64
++
+ #    define OPSIZE "q"
++#    define PTROP "q"
++#    define MAXOP "q"
+ #    define REG_a "rax"
+ #    define REG_b "rbx"
+ #    define REG_c "rcx"
+@@ -59,6 +91,8 @@
+ #elif ARCH_X86_32
+ 
+ #    define OPSIZE "l"
++#    define PTROP "k"
++#    define MAXOP "k"
+ #    define REG_a "eax"
+ #    define REG_b "ebx"
+ #    define REG_c "ecx"
