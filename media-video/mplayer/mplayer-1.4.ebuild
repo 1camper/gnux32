@@ -16,7 +16,7 @@ ftp gif ggi gsm +iconv ipv6 jack joystick jpeg kernel_linux ladspa
 +libass libcaca libmpeg2 lirc live lzo mad md5sum +cpu_flags_x86_mmx cpu_flags_x86_mmxext mng mp3 nas
 +network nut openal opengl +osdmenu oss png pnm pulseaudio pvr
 radio rar rtc rtmp samba selinux +shm sdl speex cpu_flags_x86_sse cpu_flags_x86_sse2 cpu_flags_x86_ssse3
-tga theora tremor +truetype toolame twolame +unicode v4l vcd vdpau vidix
+cpu_flags_x86_sse4_1 tga theora tremor +truetype toolame twolame +unicode v4l vcd vdpau vidix
 vorbis +X x264 xinerama +xscreensaver +xv xvid yuv4mpeg zoran"
 
 VIDEO_CARDS="mga"
@@ -453,6 +453,7 @@ src_configure() {
 	for i in ${uses}; do
 		myconf+=" $(use_enable cpu_flags_x86_${i} ${i})"
 	done
+        use cpu_flags_x86_sse4_1 && myconf+=" --enable-sse4"
 
 	uses="altivec shm"
 	for i in ${uses}; do
