@@ -4,7 +4,7 @@
 EAPI=5
 inherit eutils multilib toolchain-funcs multilib-minimal
 
-LIBVPX_TESTDATA_VER=1.5.0
+LIBVPX_TESTDATA_VER=1.6.1
 
 if [[ ${PV} == *9999* ]]; then
 	inherit git-2
