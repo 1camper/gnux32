@@ -1,0 +1,25 @@
+diff --git a/configure.ac b/configure.ac
+index 51166c33c..e406c5016 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -110,6 +110,10 @@ AC_ARG_VAR(INTGOSIZE, [integer size for go, 32 or 64])
+ INTGOSIZE=32
+ if test -z "$LIBPOSTFIX"; then
+   case "${host_os}" in
++    *linux*x32 )
++      LIBPOSTFIX="x32"
++      INTGOSIZE=64
++      ;;
+     *linux* )
+       case "${host_cpu}" in
+         aarch64 | powerpc64 | powerpc64le | s390x | x86_64 | sparc64 )
+@@ -2747,6 +2751,9 @@ if test "x$use_gd" = "x"; then
+   if test "x$GD_LDFLAGS" = "x-L/usr/lib64"; then
+      GD_LDFLAGS="";
+   fi
++  if test "x$GD_LDFLAGS" = "x-L/usr/libx32"; then
++     GD_LDFLAGS="";
++  fi
+ 
+   if test "x$use_gd" = "x"; then
+     if test "x$with_libgd" = "xyes"; then
