@@ -1,0 +1,11 @@
+--- a/configure.ac
++++ b/configure.ac
+@@ -550,7 +550,7 @@
+     ;;
+ esac
+ case "$libdir" in
+-  /usr/lib|/usr/lib64|/lib|/lib64) ;;
++  /usr/lib|/usr/libx32|/usr/lib64|/lib|/libx32|/lib64) ;;
+   '${exec_prefix}/lib')
+     if test "$exec_prefix" = "NONE"; then
+       if test "$prefix" != / -a "$prefix" != /usr; then
