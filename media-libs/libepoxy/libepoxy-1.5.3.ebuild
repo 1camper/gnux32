@@ -9,7 +9,7 @@ if [[ ${PV} = 9999* ]]; then
 	GIT_ECLASS="git-r3"
 fi
 
-PYTHON_COMPAT=( python{2_7,3_4,3_5,3_6,3_7} )
+PYTHON_COMPAT=( python{2_7,3_5,3_6,3_7} )
 PYTHON_REQ_USE='xml(+)'
 inherit ${GIT_ECLASS} meson multilib-minimal python-any-r1
 
@@ -34,6 +34,7 @@ DEPEND="${PYTHON_DEPS}
 	virtual/pkgconfig"
 
 PATCHES=( "${FILESDIR}"/${PN}-1.5.1-x32-fix-sym-version.patch )
+
 src_unpack() {
 	default
 	[[ $PV = 9999* ]] && git-r3_src_unpack
