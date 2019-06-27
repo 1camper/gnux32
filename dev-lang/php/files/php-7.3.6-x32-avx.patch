@@ -1,0 +1,13 @@
+--- a/ext/opcache/zend_accelerator_util_funcs.c
++++ b/ext/opcache/zend_accelerator_util_funcs.c
+@@ -661,8 +661,8 @@
+ 		"vmovaps 0x20(%1), %%ymm1\n\t"
+ 		"vmovaps %%ymm0, (%1,%2)\n\t"
+ 		"vmovaps %%ymm1, 0x20(%1,%2)\n\t"
+-		"addq $0x40, %1\n\t"
+-		"subq $0x40, %0\n\t"
++		"add $0x40, %1\n\t"
++		"sub $0x40, %0\n\t"
+ 		"ja .LL0%="
+ 		: "+r"(size),
+ 		"+r"(src)
