@@ -771,50 +771,34 @@ index b9b3d595..d84e9c15 100755
 2.21.0
 
 
-From ba015a31288bd4f82a80d6cf9f1449d2407f8082 Mon Sep 17 00:00:00 2001
+From 8bdd9541fc5d7ff15f032c21e692a2b1405eb8ae Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
-Date: Sun, 21 Apr 2019 14:29:50 +0200
-Subject: [PATCH 5/5] tests/util.sh : fix tests for x32 or if valgrind isn't
- present
+Date: Wed, 24 Jul 2019 21:21:20 +0200
+Subject: [PATCH 5/5] tests/util.sh : run tests without valgrind
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
 Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
 ---
- tests/util.sh | 19 +++++++++++++++----
- 1 file changed, 15 insertions(+), 4 deletions(-)
+ tests/util.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/tests/util.sh b/tests/util.sh
-index 89a1e0fc..353751c4 100644
+index 89a1e0fc..80bfbb0b 100644
 --- a/tests/util.sh
 +++ b/tests/util.sh
-@@ -34,10 +34,21 @@ valgrind_test() {
+@@ -34,9 +34,9 @@ valgrind_test() {
  
      prepare "${dimensions}" "${frames}"
  
--    print_and_run \
--        libtool execute \
++# run tests without valgrind since it's not available everywhere and instruction set support is incomplete
+     print_and_run \
+         libtool execute \
 -            valgrind --leak-check=full --error-exitcode=1 -- \
--            ../src/kvazaar -i "${yuvfile}" "--input-res=${dimensions}" -o "${hevcfile}" "$@"
-+# use valgrind only if present
-+# valgrind doesn't support x32 yet
-+    if ! valgrind --version &> /dev/null ||
-+        readelf -h /usr/bin/valgrind | grep ELF32 &> /dev/null && readelf -h /usr/bin/valgrind | grep X86-64 &> /dev/null ||
-+        readelf -h ../src/.libs/kvazaar | grep ELF32 &> /dev/null && readelf -h ../src/.libs/kvazaar | grep X86-64 &> /dev/null
-+    then
-+        print_and_run \
-+            libtool execute \
-+                ../src/kvazaar -i "${yuvfile}" "--input-res=${dimensions}" -o "${hevcfile}" "$@"
-+    else
-+        print_and_run \
-+            libtool execute \
-+                valgrind --leak-check=full --error-exitcode=1 -- \
-+                ../src/kvazaar -i "${yuvfile}" "--input-res=${dimensions}" -o "${hevcfile}" "$@"
-+    fi
+             ../src/kvazaar -i "${yuvfile}" "--input-res=${dimensions}" -o "${hevcfile}" "$@"
  
      print_and_run \
-         TAppDecoderStatic -b "${hevcfile}"
 -- 
 2.21.0
 
