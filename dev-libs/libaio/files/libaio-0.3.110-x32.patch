@@ -1,0 +1,135 @@
+x32: fix layout and syscall nums and properly load syscall arguments
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+2019/08/17
+--- a/src/libaio.h
++++ b/src/libaio.h
+@@ -52,7 +52,7 @@
+ /* little endian, 32 bits */
+ #if defined(__i386__) || (defined(__arm__) && !defined(__ARMEB__)) || \
+     defined(__sh__) || defined(__bfin__) || defined(__MIPSEL__) || \
+-    defined(__cris__)
++    defined(__cris__) || (defined(__x86_64) && defined(__ILP32__))
+ #define PADDED(x, y)	x; unsigned y
+ #define PADDEDptr(x, y)	x; unsigned y
+ #define PADDEDul(x, y)	unsigned long x; unsigned y
+--- a/src/syscall-x86_x32.h
++++ b/src/syscall-x86_x32.h
+@@ -0,0 +1,106 @@
++#ifndef __X32_SYSCALL_BIT
++#define __X32_SYSCALL_BIT	0x40000000
++#endif
++#ifndef __NR_io_setup
++#define __NR_io_setup		(__X32_SYSCALL_BIT + 543)
++#endif
++#ifndef __NR_io_destroy
++#define __NR_io_destroy		(__X32_SYSCALL_BIT + 207)
++#endif
++#ifndef __NR_io_getevents
++#define __NR_io_getevents	(__X32_SYSCALL_BIT + 208)
++#endif
++#ifndef __NR_io_submit
++#define __NR_io_submit		(__X32_SYSCALL_BIT + 544)
++#endif
++#ifndef __NR_io_cancel
++#define __NR_io_cancel		(__X32_SYSCALL_BIT + 210)
++#endif
++
++#define __syscall_clobber "r11","rcx","memory"
++#define __syscall "syscall"
++
++#define __syscall_arg(x) (__extension__(				\
++	  (long long)__builtin_choose_expr(				\
++	    __builtin_classify_type(x) == 5, (unsigned long)(x),(x))))
++
++/* io_destroy */
++#define io_syscall1(type,fname,sname,type1,arg1)			\
++type fname(type1 arg1)							\
++{									\
++long __res;								\
++__asm__ volatile (__syscall						\
++	: "=a" (__res)							\
++	: "0" (__NR_##sname),						\
++	  "D" (__syscall_arg(arg1))					\
++	: __syscall_clobber );						\
++return __res;								\
++}
++
++/* io_setup */
++#define io_syscall2(type,fname,sname,type1,arg1,type2,arg2)		\
++type fname(type1 arg1,type2 arg2)					\
++{									\
++long __res;								\
++__asm__ volatile (__syscall						\
++	: "=a" (__res)							\
++	: "0" (__NR_##sname),						\
++	  "D" (__syscall_arg(arg1)),					\
++	  "S" (__syscall_arg(arg2))					\
++	: __syscall_clobber ); 						\
++return __res;								\
++}
++
++/* io_submit */
++/* io_cancel */
++#define io_syscall3(type,fname,sname,type1,arg1,type2,arg2,type3,arg3)	\
++type fname(type1 arg1,type2 arg2,type3 arg3)				\
++{									\
++long __res;								\
++__asm__ volatile (__syscall						\
++	: "=a" (__res)							\
++	: "0" (__NR_##sname),						\
++	  "D" (__syscall_arg(arg1)),					\
++	  "S" (__syscall_arg(arg2)),					\
++	  "d" (__syscall_arg(arg3))					\
++	: __syscall_clobber);						\
++return __res;								\
++}
++
++/* unused */
++#define io_syscall4(type,fname,sname,type1,arg1,type2,arg2,type3,arg3,	\
++	  type4,arg4)							\
++type fname (type1 arg1, type2 arg2, type3 arg3, type4 arg4)		\
++{									\
++long __res;								\
++register long long __a4 asm ("r10") = __syscall_arg(arg4);		\
++__asm__ volatile (__syscall						\
++	: "=a" (__res)							\
++	: "0" (__NR_##sname),						\
++	  "D" (__syscall_arg(arg1)),					\
++	  "S" (__syscall_arg(arg2)),					\
++	  "d" (__syscall_arg(arg3)),					\
++	  "r" (__a4)							\
++	: __syscall_clobber);						\
++return __res;								\
++}
++
++/* io_getevents */
++#define io_syscall5(type,fname,sname,type1,arg1,type2,arg2,type3,arg3,	\
++	  type4,arg4,type5,arg5)					\
++type fname (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5)	\
++{									\
++long __res;								\
++register long long __a4 asm ("r10") = __syscall_arg(arg4);		\
++register long long __a5 asm ("r8") = __syscall_arg(arg5);		\
++__asm__ volatile (__syscall						\
++	: "=a" (__res)							\
++	: "0" (__NR_##sname),						\
++	  "D" (__syscall_arg(arg1)),					\
++	  "S" (__syscall_arg(arg2)),					\
++	  "d" (__syscall_arg(arg3)),					\
++	  "g" (__a4),							\
++	  "g" (__a5)							\
++	: __syscall_clobber);						\
++return __res;								\
++}
+--- a/src/syscall.h
++++ b/src/syscall.h
+@@ -12,6 +12,8 @@
+ 
+ #if defined(__i386__)
+ #include "syscall-i386.h"
++#elif defined(__x86_64__) && defined(__ILP32__)
++#include "syscall-x86_x32.h"
+ #elif defined(__x86_64__)
+ #include "syscall-x86_64.h"
+ #elif defined(__ia64__)
