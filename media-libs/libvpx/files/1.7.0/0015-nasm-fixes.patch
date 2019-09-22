@@ -1,0 +1,46 @@
+From dbb63b3ab58dfd4f51b20cd1ad742888fee5353a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matthias=20R=C3=A4ncker?= <theonetruecamper@gmx.de>
+Date: Wed, 19 Sep 2018 09:26:28 +0200
+Subject: [PATCH] nasm fixes
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Matthias Räncker <theonetruecamper@gmx.de>
+Change-Id: I95b5d6cbd4dca8c1a47dd56ac6d0a7e9bc2d86ae
+---
+ third_party/x86inc/x86inc.asm | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/third_party/x86inc/x86inc.asm b/third_party/x86inc/x86inc.asm
+index feb501e98..d894ed5b5 100644
+--- a/third_party/x86inc/x86inc.asm
++++ b/third_party/x86inc/x86inc.asm
+@@ -147,9 +147,9 @@
+                 ret
+                 %%exitGG:
+                 %define GLOBAL(x) x + %1 wrt ..gotoff
+-                %undef RESTORE_GOT
++                %define RESTORE_GOT
+             %endmacro
+-            %macro GET_GOT
++            %macro GET_GOT 1
+                 PUSH %1
+                 GET_GOT_NO_SAVE %1
+                 %define RESTORE_GOT POP %1
+@@ -163,10 +163,11 @@
+                 mov %1, [esp]
+                 ret
+                 %%exitGG:
++                %undef GLOBAL
+                 %define GLOBAL(x) x + %1 - %%get_got
+                 %undef RESTORE_GOT
+             %endmacro
+-            %macro GET_GOT
++            %macro GET_GOT 1
+                 PUSH %1
+                 GET_GOT_NO_SAVE %1
+                 %define RESTORE_GOT POP %1
+-- 
+2.21.0
+

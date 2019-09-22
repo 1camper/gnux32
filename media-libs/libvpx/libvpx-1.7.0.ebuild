@@ -61,6 +61,7 @@ PATCHES=(
 	"${FILESDIR}/${PV}/0012-x32-support-x86_abi_support.asm-users.patch"
 	"${FILESDIR}/${PV}/0013-x32-support-x86inc.asm.patch"
 	"${FILESDIR}/${PV}/0014-x32-support-x86inc.asm-users.patch"
+	"${FILESDIR}/${PV}/0015-nasm-fixes.patch"
 )
 
 src_configure() {
