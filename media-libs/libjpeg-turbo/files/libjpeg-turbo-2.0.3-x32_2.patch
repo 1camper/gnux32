@@ -1,0 +1,43 @@
+From 493aded0a86e4c6beb00ab617510004ee55b50c3 Mon Sep 17 00:00:00 2001
+From: DRC <information@libjpeg-turbo.org>
+Date: Fri, 8 Nov 2019 14:53:55 -0600
+Subject: [PATCH 2/3] Enable SSE2 progressive Huffman encoder for x32
+ (713c451f582fca2549fe4076eb850f2949cad400)
+
+Referring to #289, I'm not sure where I arrived at the conclusion that
+the SSE2 progressive Huffman encoder doesn't provide any speedup for
+x32.  Upon re-testing, I discovered it to be about 50% faster than the
+C encoder.
+
+This commit also re-purposes one of the CI tests (specifically, the
+jpeg-7 API/ABI test) so that it tests x32 as well.
+---
+ .travis.yml         | 7 ++++++-
+ simd/x86_64/jsimd.c | 4 ----
+ 2 files changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/simd/x86_64/jsimd.c b/simd/x86_64/jsimd.c
+index 1e5698b..eb76679 100644
+--- a/simd/x86_64/jsimd.c
++++ b/simd/x86_64/jsimd.c
+@@ -1031,8 +1031,6 @@ jsimd_can_encode_mcu_AC_first_prepare(void)
+     return 0;
+   if (sizeof(JCOEF) != 2)
+     return 0;
+-  if (SIZEOF_SIZE_T != 8)
+-    return 0;
+   if (simd_support & JSIMD_SSE2)
+     return 1;
+ 
+@@ -1057,8 +1055,6 @@ jsimd_can_encode_mcu_AC_refine_prepare(void)
+     return 0;
+   if (sizeof(JCOEF) != 2)
+     return 0;
+-  if (SIZEOF_SIZE_T != 8)
+-    return 0;
+   if (simd_support & JSIMD_SSE2)
+     return 1;
+ 
+-- 
+2.23.0
+
