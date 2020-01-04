@@ -16,7 +16,7 @@ SRC_URI="https://dl.bintray.com/boostorg/release/${PV}/source/boost_${MY_PV}.tar
 
 LICENSE="Boost-1.0"
 SLOT="0/${PV}" # ${PV} instead ${MAJOR_V} due to bug 486122
-KEYWORDS="~alpha amd64 arm ~arm64 ~hppa ~ia64 ~mips ~ppc ~ppc64 ~s390 ~sh ~sparc x86 ~ppc-aix ~amd64-linux ~x86-linux ~ppc-macos ~x64-macos ~x86-macos ~sparc-solaris ~sparc64-solaris ~x86-solaris ~x86-winnt"
+KEYWORDS="alpha amd64 arm arm64 hppa ia64 ~mips ppc ppc64 s390 ~sh sparc x86 ~ppc-aix ~amd64-linux ~x86-linux ~ppc-macos ~x64-macos ~x86-macos ~sparc-solaris ~sparc64-solaris ~x86-solaris ~x86-winnt"
 IUSE="bzip2 context debug doc icu lzma +nls mpi numpy python static-libs +threads tools zlib zstd"
 REQUIRED_USE="
 	mpi? ( threads )
@@ -49,9 +49,9 @@ BDEPEND="=dev-util/boost-build-${MAJOR_V}*"
 S="${WORKDIR}/${PN}_${MY_PV}"
 
 PATCHES=(
-	"${FILESDIR}"/${PN}-1.48.0-disable_icu_rpath.patch
-	"${FILESDIR}"/${PN}-1.56.0-build-auto_index-tool.patch
 	"${FILESDIR}"/${PN}-1.67.0-fix-x32-build.patch
+	"${FILESDIR}"/${PN}-1.71.0-disable_icu_rpath.patch
+	"${FILESDIR}"/${PN}-1.71.0-build-auto_index-tool.patch
 )
 
 python_bindings_needed() {
@@ -130,11 +130,6 @@ pkg_setup() {
 
 src_prepare() {
 	default
-
-	# Do not try to build missing 'wave' tool, bug #522682
-	# Upstream bugreport - https://svn.boost.org/trac/boost/ticket/10507
-	sed -i -e 's:wave/build//wave::' tools/Jamfile.v2 || die
-
 	multilib_copy_sources
 }
 
@@ -332,7 +327,7 @@ pkg_postinst() {
 	elog "  undefined reference to \`boost::re_detail_$(ver_cut 1)0$(ver_cut 2)00::cpp_regex_traits_implementation"
 	elog "    <char>::transform_primary[abi:cxx11](char const*, char const*) const'"
 	elog
-	elog "Then you need you need to recompile Boost and all its reverse dependencies"
+	elog "Then you need to recompile Boost and all its reverse dependencies"
 	elog "using the same toolchain. In general, *every* change of the C++ toolchain"
 	elog "requires a complete rebuild of the boost-dependent ecosystem."
 	elog
